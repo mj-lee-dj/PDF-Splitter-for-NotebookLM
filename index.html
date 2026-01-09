@@ -1,0 +1,2820 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Splitter for NotebookLM</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #d4af37;
+      --primary-dark: #b8941f;
+      --secondary: #a3a3a3;
+      --accent: #d4af37;
+      --success: #d4af37;
+      --danger: #ef4444;
+      --bg: #0a0a0a;
+      --surface: #171717;
+      --text: #fafafa;
+      --text-secondary: #a3a3a3;
+      --border: #262626;
+      --shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .app-container {
+      min-height: 100vh;
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+      animation: fadeInDown 0.6s ease;
+    }
+
+    .logo {
+      font-size: 2.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #d4af37, #f4d03f);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      font-weight: 400;
+    }
+
+    .badge {
+      display: inline-block;
+      background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(244, 208, 63, 0.1));
+      color: var(--primary);
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      border: 1px solid rgba(212, 175, 55, 0.4);
+    }
+
+    .upload-section {
+      background: #1f1f1f;
+      border-radius: 16px;
+      padding: 3rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      margin-bottom: 2rem;
+      transition: all 0.3s ease;
+      animation: fadeInUp 0.6s ease 0.1s both;
+      border: 1px solid var(--border);
+    }
+
+    .upload-area {
+      border: 3px dashed var(--border);
+      border-radius: 16px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.02), rgba(14, 165, 233, 0.02));
+    }
+
+    .upload-area:hover {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(14, 165, 233, 0.05));
+      transform: translateY(-2px);
+    }
+
+    .upload-area.dragover {
+      border-color: var(--secondary);
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(37, 99, 235, 0.1));
+      transform: scale(1.02);
+    }
+
+    .upload-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.6;
+    }
+
+    .upload-text {
+      font-size: 1.2rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+
+    .upload-hint {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .analysis-section {
+      background: var(--surface);
+      border-radius: 24px;
+      padding: 2.5rem;
+      box-shadow: 0 4px 24px var(--shadow);
+      margin-bottom: 2rem;
+      animation: fadeInUp 0.6s ease 0.2s both;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .file-info {
+      background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(244, 208, 63, 0.05));
+      padding: 1.5rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      border-left: 4px solid var(--primary);
+    }
+
+    .file-name {
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .file-meta {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .info-box {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.1));
+      border-left: 4px solid var(--accent);
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    /* Personal Info Detection */
+    .pii-section {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.05));
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .pii-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .pii-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--danger);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pii-count {
+      background: var(--danger);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .pii-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .pii-item {
+      background: #1f1f1f;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+    }
+
+    .pii-item:hover {
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+
+    .pii-item.selected {
+      border-color: var(--danger);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.1));
+    }
+
+    .pii-checkbox {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .pii-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pii-type {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .pii-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .pii-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+    }
+
+    .pii-button {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pii-button-select {
+      background: var(--surface);
+      color: var(--text);
+      border: 2px solid var(--border);
+    }
+
+    .pii-button-select:hover {
+      border-color: var(--danger);
+    }
+
+    .pii-button-remove {
+      background: var(--danger);
+      color: white;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    }
+
+    .pii-button-remove:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .pii-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* Manual Masking */
+    .masking-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .masking-container {
+      background: #171717;
+      border-radius: 16px;
+      max-width: 1600px;
+      width: 100%;
+      height: 95vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border);
+    }
+
+    .masking-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .masking-nav {
+      width: 280px;
+      background: var(--bg);
+      border-right: 2px solid var(--border);
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .masking-nav-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      padding: 0 0.5rem;
+    }
+
+    .masking-nav-item {
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+      background: var(--surface);
+    }
+
+    .masking-nav-item:hover {
+      border-color: var(--primary);
+      transform: translateX(4px);
+    }
+
+    .masking-nav-item.active {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.1));
+    }
+
+    .masking-nav-item-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .masking-nav-item-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .masking-nav-item-status {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: var(--success);
+      color: white;
+      font-weight: 600;
+    }
+
+    .masking-nav-item-info {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .masking-header {
+      padding: 1.5rem 2rem;
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .masking-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .masking-close {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 1.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .masking-close:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    .masking-body {
+      padding: 1.5rem;
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .masking-info {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(14, 165, 233, 0.1));
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .masking-canvas-container {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      overflow: auto;
+      background: #0a0a0a;
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .masking-canvas {
+      cursor: crosshair;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .masking-areas-list {
+      background: var(--bg);
+      padding: 1rem;
+      border-radius: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .masking-area-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      background: var(--surface);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    .masking-area-remove {
+      background: var(--danger);
+      color: white;
+      border: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.3s ease;
+    }
+
+    .masking-area-remove:hover {
+      transform: scale(1.05);
+    }
+
+    .masking-footer {
+      padding: 1.5rem 2rem;
+      border-top: 2px solid var(--border);
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+    }
+
+    .icon-button.mask {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      font-size: 0.85rem;
+    }
+
+    .icon-button.mask:hover {
+      transform: scale(1.05);
+    }
+
+    /* Footer */
+    .app-footer {
+      margin-top: 4rem;
+      padding: 2rem;
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(14, 165, 233, 0.05));
+      border-radius: 12px;
+      text-align: center;
+      border-top: 2px solid var(--border);
+    }
+
+    .footer-content {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .footer-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .footer-contact {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+    }
+
+    .footer-email {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .footer-email:hover {
+      color: var(--secondary);
+      text-decoration: underline;
+    }
+
+    .footer-divider {
+      width: 60px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      margin: 1rem auto;
+      border-radius: 2px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+    }
+
+    .spinner {
+      border: 4px solid var(--border);
+      border-top: 4px solid var(--primary);
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .split-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .split-item {
+      background: var(--bg);
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .split-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(to bottom, var(--primary), var(--secondary));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .split-item:hover {
+      border-color: var(--primary);
+      transform: translateX(4px);
+    }
+
+    .split-item:hover::before {
+      opacity: 1;
+    }
+
+    .split-header {
+      margin-bottom: 1rem;
+    }
+
+    .split-title-display {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .split-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2rem;
+      height: 2rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 0 0.5rem;
+    }
+
+    .split-title-text {
+      flex: 1;
+    }
+
+    .split-controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .split-title-input {
+      flex: 1;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.6rem 0.85rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      background: var(--surface);
+      min-width: 200px;
+    }
+
+    .split-title-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .split-controls {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .icon-button {
+      min-width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      padding: 0 0.75rem;
+      white-space: nowrap;
+    }
+
+    .icon-button:hover {
+      background: var(--primary);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .icon-button.delete:hover {
+      background: var(--danger);
+    }
+
+    .icon-button.preview {
+      font-size: 0.85rem;
+      gap: 0.5rem;
+    }
+
+    .split-info {
+      display: flex;
+      gap: 2rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      font-family: 'JetBrains Mono', monospace;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .page-range {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .page-input {
+      width: 60px;
+      padding: 0.5rem;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+    }
+
+    .page-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .file-size {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--surface);
+      border-radius: 8px;
+      font-weight: 500;
+    }
+
+    .file-size.warning {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+      color: var(--danger);
+      border: 2px solid #fca5a5;
+      animation: pulse-warning 2s ease-in-out infinite;
+    }
+
+    .file-size.ok {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(14, 165, 233, 0.1));
+      color: var(--success);
+    }
+
+    @keyframes pulse-warning {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+
+    .preview-section {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 2px solid var(--border);
+    }
+
+    .preview-loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+    }
+
+    .preview-loading .spinner {
+      width: 30px;
+      height: 30px;
+      border-width: 3px;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+
+    .page-preview {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+
+    .page-preview:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
+      z-index: 10;
+    }
+
+    .page-preview.split-start {
+      border: 3px solid var(--primary);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+    }
+
+    .page-preview.split-end {
+      border: 3px solid var(--secondary);
+      box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
+    }
+
+    .page-preview-image {
+      width: 100%;
+      height: auto;
+      display: block;
+      aspect-ratio: 1 / 1.414;
+      object-fit: contain;
+      background: #f9fafb;
+    }
+
+    .page-number {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      color: white;
+      padding: 0.75rem 0.5rem 0.5rem;
+      font-size: 0.8rem;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .page-marker {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: var(--primary);
+      color: white;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .page-marker.end {
+      background: var(--secondary);
+    }
+
+    .action-section {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      padding: 1rem 2rem;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .button-primary {
+      background: linear-gradient(135deg, #d4af37, #f4d03f);
+      color: #0a0a0a;
+      box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
+      font-weight: 600;
+    }
+
+    .button-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(212, 175, 55, 0.5);
+      background: linear-gradient(135deg, #f4d03f, #d4af37);
+    }
+
+    .button-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .button-secondary:hover {
+      background: #262626;
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .button-secondary:hover {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(14, 165, 233, 0.05));
+    }
+
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .progress-section {
+      background: var(--surface);
+      border-radius: 24px;
+      padding: 2.5rem;
+      box-shadow: 0 4px 24px var(--shadow);
+      margin-bottom: 2rem;
+    }
+
+    .progress-bar-container {
+      background: #262626;
+      height: 12px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      border: 1px solid var(--border);
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #d4af37, #f4d03f);
+      transition: width 0.3s ease;
+      border-radius: 6px;
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+    }
+
+    .progress-text {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .results-section {
+      background: #1f1f1f;
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border);
+    }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      background: #262626;
+      border-radius: 12px;
+      margin-bottom: 0.75rem;
+      transition: all 0.3s ease;
+    }
+
+    .result-item:hover {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(14, 165, 233, 0.05));
+      transform: translateX(4px);
+    }
+
+    .result-name {
+      font-weight: 500;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+    }
+
+    .download-icon {
+      color: var(--success);
+      font-size: 1.2rem;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--surface);
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      animation: slideInRight 0.3s ease;
+      z-index: 1000;
+      border-left: 4px solid var(--success);
+    }
+
+    @keyframes slideInRight {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .app-container {
+        padding: 1rem;
+      }
+
+      .upload-section,
+      .analysis-section {
+        padding: 1.5rem;
+      }
+
+      .split-header {
+        flex-direction: column;
+      }
+
+      .split-controls {
+        width: 100%;
+        justify-content: flex-end;
+      }
+
+      .split-info {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+
+      .action-section {
+        flex-direction: column;
+      }
+
+      .button {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    function App() {
+      const [file, setFile] = useState(null);
+      const [pdfDoc, setPdfDoc] = useState(null);
+      const [analyzing, setAnalyzing] = useState(false);
+      const [pdfInfo, setPdfInfo] = useState(null);
+      const [splits, setSplits] = useState([]);
+      const [processing, setProcessing] = useState(false);
+      const [progress, setProgress] = useState(0);
+      const [results, setResults] = useState([]);
+      const [toast, setToast] = useState(null);
+      const [previewCache, setPreviewCache] = useState({});
+      const [loadingPreviews, setLoadingPreviews] = useState({});
+      const [avgPageSize, setAvgPageSize] = useState(0);
+      const [detectedPII, setDetectedPII] = useState([]);
+      const [selectedPII, setSelectedPII] = useState([]);
+      const [removingPII, setRemovingPII] = useState(false);
+      const [maskingMode, setMaskingMode] = useState(null); // 현재 마스킹 중인 항목
+      const [maskAreas, setMaskAreas] = useState({}); // 각 항목별 마스킹 영역 저장
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [drawStart, setDrawStart] = useState(null);
+      const [drawCurrent, setDrawCurrent] = useState(null);
+      const [showOnlySelected, setShowOnlySelected] = useState(false); // 체크한 항목만 보기
+      
+      const fileInputRef = useRef(null);
+      const canvasRef = useRef(null);
+      const [isDragging, setIsDragging] = useState(false);
+
+      const showToast = (message) => {
+        setToast(message);
+        setTimeout(() => setToast(null), 3000);
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      };
+
+      const handleDragLeave = () => {
+        setIsDragging(false);
+      };
+
+      const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const droppedFile = e.dataTransfer.files[0];
+        if (droppedFile && droppedFile.type === 'application/pdf') {
+          handleFileSelect(droppedFile);
+        }
+      };
+
+      // 단일 페이지 썸네일 생성
+      const generateThumbnail = async (pdf, pageNum) => {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 0.25 });
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+        
+        return canvas.toDataURL('image/jpeg', 0.7);
+      };
+
+      // 개인정보 패턴 정의 및 탐지
+      const detectPersonalInfo = async (pdf, totalPages) => {
+        const patterns = {
+          ssn: {
+            name: '주민등록번호',
+            regex: /\d{6}[-\s]?\d{7}/g,
+            icon: '🆔'
+          },
+          phone: {
+            name: '전화번호',
+            regex: /0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}/g,
+            icon: '📱'
+          },
+          passport: {
+            name: '여권번호',
+            regex: /[A-Z]\d{8}/g,
+            icon: '🛂'
+          },
+          account: {
+            name: '계좌번호',
+            regex: /\d{3,4}[-\s]?\d{2,6}[-\s]?\d{2,7}/g,
+            icon: '💳'
+          },
+          email: {
+            name: '이메일',
+            regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+            icon: '📧'
+          },
+          signature: {
+            name: '서명',
+            regex: /서명|sign|署名|印|날인|捺印|성명|이름\s*[:：]/gi,
+            icon: '✍️'
+          },
+          name: {
+            name: '성명',
+            regex: /성명\s*[:：]\s*[가-힣]{2,4}|이름\s*[:：]\s*[가-힣]{2,4}|작성자\s*[:：]\s*[가-힣]{2,4}/g,
+            icon: '👤'
+          },
+          birthdate: {
+            name: '생년월일',
+            regex: /\d{4}년\s*\d{1,2}월\s*\d{1,2}일|\d{4}[-./]\d{1,2}[-./]\d{1,2}|생년월일\s*[:：]\s*\d+/g,
+            icon: '🎂'
+          },
+          address: {
+            name: '주소',
+            regex: /[서울부산대구인천광주대전울산세종경기강원충북충남전북전남경북경남제주]+(특별시|광역시|특별자치시|도|특별자치도)\s+[\w\s]+[시구군]\s+[\w\s]+(동|읍|면|로|가)/g,
+            icon: '🏠'
+          },
+          residentNumber: {
+            name: '외국인등록번호',
+            regex: /\d{6}[-\s]?\d{7}/g,
+            icon: '🆔'
+          }
+        };
+
+        const found = [];
+        const samplePages = Math.min(totalPages, 50); // 최대 50페이지만 샘플링
+
+        for (let i = 1; i <= samplePages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+
+          Object.entries(patterns).forEach(([type, pattern]) => {
+            const matches = pageText.match(pattern.regex);
+            if (matches) {
+              matches.forEach(match => {
+                // 서명의 경우 주변 영역 정보도 저장
+                const isSignature = type === 'signature';
+                
+                // 중복 제거 (서명은 페이지별로 여러 개 가능)
+                const isDuplicate = found.some(f => 
+                  f.value === match && f.type === type && f.page === i
+                );
+                
+                if (!isDuplicate) {
+                  found.push({
+                    id: Date.now() + Math.random(),
+                    type,
+                    typeName: pattern.name,
+                    icon: pattern.icon,
+                    value: match,
+                    page: i,
+                    pattern: pattern.regex,
+                    isSignature: isSignature
+                  });
+                }
+              });
+            }
+          });
+        }
+
+        return found;
+      };
+
+      // 수동 마스킹 모드 시작
+      const startManualMasking = async (piiItem) => {
+        setMaskingMode(piiItem);
+        
+        // 약간의 지연 후 렌더링 (DOM이 준비될 때까지)
+        setTimeout(async () => {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          const page = await pdf.getPage(piiItem.page);
+          const content = await page.getTextContent();
+          
+          // Canvas 렌더링 (한 번만)
+          await renderPageToCanvas(piiItem.page);
+          
+          const canvas = canvasRef.current;
+          const context = canvas.getContext('2d');
+          const viewport = page.getViewport({ scale: 2.0 });
+          
+          // 하이라이트할 영역 저장
+          let highlightY = null;
+          
+          // 해당 텍스트 위치 찾아서 하이라이트 표시 (정적)
+          content.items.forEach((textItem) => {
+            const itemText = textItem.str;
+            
+            if (itemText.includes(piiItem.value) || 
+                new RegExp(piiItem.pattern.source, 'i').test(itemText)) {
+              
+              const transform = textItem.transform;
+              const x = transform[4] * 2.0;
+              const y = (viewport.height / 2.0 - transform[5]) * 2.0;
+              const fontSize = transform[0] * 2.0;
+              const width = Math.max(piiItem.value.length * fontSize * 0.6, 100);
+              const height = fontSize * 1.5;
+              
+              // 첫 번째 매치 위치 저장
+              if (highlightY === null) {
+                highlightY = y;
+              }
+              
+              // 노란색 반투명 하이라이트 (정적)
+              context.fillStyle = 'rgba(255, 235, 59, 0.5)';
+              context.fillRect(x - 5, y - height + 5, width + 10, height);
+              
+              // 빨간 테두리
+              context.strokeStyle = '#ef4444';
+              context.lineWidth = 2;
+              context.strokeRect(x - 5, y - height + 5, width + 10, height);
+            }
+          });
+          
+          // 기존 마스킹 영역이 있으면 표시
+          if (maskAreas[piiItem.id] && maskAreas[piiItem.id].length > 0) {
+            maskAreas[piiItem.id].forEach(area => {
+              context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+              context.fillRect(area.x, area.y, area.width, area.height);
+              context.strokeStyle = '#22c55e';
+              context.lineWidth = 2;
+              context.strokeRect(area.x, area.y, area.width, area.height);
+            });
+          }
+          
+          // 하이라이트와 기존 마스킹이 포함된 상태를 백업
+          canvas.pageImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          
+          // 하이라이트 위치로 스크롤 (중앙 정렬)
+          if (highlightY !== null) {
+            const container = canvas.parentElement;
+            const scrollY = highlightY - (container.clientHeight / 2);
+            container.scrollTop = Math.max(0, scrollY);
+          }
+        }, 100);
+      };
+
+      // Canvas에 페이지 렌더링
+      const renderPageToCanvas = async (pageNum) => {
+        if (!canvasRef.current || !file) return;
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+        const page = await pdf.getPage(pageNum);
+        
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        const viewport = page.getViewport({ scale: 2.0 }); // 스케일 증가
+        
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+      };
+
+      // 캔버스 오버레이만 다시 그리기 (페이지 재렌더링 없음)
+      const redrawOverlays = () => {
+        if (!canvasRef.current || !maskingMode) return;
+        
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        
+        // 백업된 페이지 이미지 복원
+        if (canvas.pageImageData) {
+          context.putImageData(canvas.pageImageData, 0, 0);
+        }
+        
+        // 기존 마스킹 영역 표시 (초록색)
+        const existingAreas = maskAreas[maskingMode.id] || [];
+        existingAreas.forEach(area => {
+          context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          context.fillRect(area.x, area.y, area.width, area.height);
+          context.strokeStyle = '#22c55e';
+          context.lineWidth = 2;
+          context.strokeRect(area.x, area.y, area.width, area.height);
+        });
+      };
+
+      // 마우스 드래그 시작
+      const handleMouseDown = (e) => {
+        if (!maskingMode) return;
+        
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        setIsDrawing(true);
+        setDrawStart({ x, y });
+        setDrawCurrent({ x, y });
+      };
+
+      // 마우스 이동
+      const handleMouseMove = (e) => {
+        if (!isDrawing || !maskingMode) return;
+        
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        setDrawCurrent({ x, y });
+        
+        // 오버레이만 다시 그리기 (페이지 재렌더링 없음)
+        redrawOverlays();
+        
+        const context = canvas.getContext('2d');
+        
+        // 현재 그리는 사각형 (빨간색)
+        context.fillStyle = 'rgba(239, 68, 68, 0.3)';
+        context.strokeStyle = '#ef4444';
+        context.lineWidth = 3;
+        context.setLineDash([5, 5]);
+        const width = x - drawStart.x;
+        const height = y - drawStart.y;
+        context.fillRect(drawStart.x, drawStart.y, width, height);
+        context.strokeRect(drawStart.x, drawStart.y, width, height);
+        context.setLineDash([]);
+      };
+
+      // 마우스 드래그 종료
+      const handleMouseUp = (e) => {
+        if (!isDrawing || !maskingMode || !drawStart) return;
+        
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const width = x - drawStart.x;
+        const height = y - drawStart.y;
+        
+        // 최소 크기 체크
+        if (Math.abs(width) > 10 && Math.abs(height) > 10) {
+          const newArea = {
+            x: Math.min(drawStart.x, x),
+            y: Math.min(drawStart.y, y),
+            width: Math.abs(width),
+            height: Math.abs(height)
+          };
+          
+          // 마스킹 영역 저장
+          const updatedAreas = [...(maskAreas[maskingMode.id] || []), newArea];
+          setMaskAreas(prev => ({
+            ...prev,
+            [maskingMode.id]: updatedAreas
+          }));
+          
+          // 오버레이 다시 그리기
+          redrawOverlays();
+          const context = canvas.getContext('2d');
+          
+          // 새로 추가된 영역 표시
+          updatedAreas.forEach(area => {
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(area.x, area.y, area.width, area.height);
+            context.strokeStyle = '#22c55e';
+            context.lineWidth = 2;
+            context.strokeRect(area.x, area.y, area.width, area.height);
+          });
+          
+          // 백업 이미지 업데이트
+          canvas.pageImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          
+          showToast('✅ 마스킹 영역이 추가되었습니다.');
+        }
+        
+        setIsDrawing(false);
+        setDrawStart(null);
+        setDrawCurrent(null);
+      };
+
+      // 마스킹 영역 삭제
+      const removeMaskArea = (piiId, areaIndex) => {
+        const updatedAreas = (maskAreas[piiId] || []).filter((_, idx) => idx !== areaIndex);
+        
+        setMaskAreas(prev => ({
+          ...prev,
+          [piiId]: updatedAreas
+        }));
+        
+        // 오버레이만 다시 그리기
+        if (maskingMode && canvasRef.current) {
+          redrawOverlays();
+          const canvas = canvasRef.current;
+          const context = canvas.getContext('2d');
+          
+          // 남은 마스킹 영역 표시
+          updatedAreas.forEach(area => {
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(area.x, area.y, area.width, area.height);
+            context.strokeStyle = '#22c55e';
+            context.lineWidth = 2;
+            context.strokeRect(area.x, area.y, area.width, area.height);
+          });
+          
+          // 백업 이미지 업데이트
+          canvas.pageImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        }
+        
+        showToast('✅ 마스킹 영역이 삭제되었습니다.');
+      };
+
+      // 마스킹 완료 - PDF에 적용
+      const applyManualMasking = async () => {
+        const itemsWithMasks = Object.keys(maskAreas).filter(
+          id => maskAreas[id] && maskAreas[id].length > 0
+        );
+        
+        if (itemsWithMasks.length === 0) {
+          showToast('⚠️ 마스킹 영역을 추가해주세요.');
+          return;
+        }
+        
+        setRemovingPII(true);
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const { PDFDocument, rgb } = window.PDFLib;
+          const pdfDoc = await PDFDocument.load(arrayBuffer);
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          
+          // 페이지별로 마스킹 적용
+          for (const piiId of itemsWithMasks) {
+            const piiItem = detectedPII.find(item => item.id === piiId);
+            if (!piiItem) continue;
+            
+            const pageNum = piiItem.page;
+            const pageIndex = pageNum - 1;
+            const page = await pdf.getPage(pageNum);
+            const pdfLibPage = pdfDoc.getPage(pageIndex);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const { height } = pdfLibPage.getSize();
+            
+            // Canvas 좌표를 PDF 좌표로 변환
+            const areas = maskAreas[piiId];
+            areas.forEach(area => {
+              const pdfX = (area.x / viewport.width) * pdfLibPage.getWidth();
+              const pdfY = height - ((area.y + area.height) / viewport.height) * height;
+              const pdfWidth = (area.width / viewport.width) * pdfLibPage.getWidth();
+              const pdfHeight = (area.height / viewport.height) * height;
+              
+              pdfLibPage.drawRectangle({
+                x: pdfX,
+                y: pdfY,
+                width: pdfWidth,
+                height: pdfHeight,
+                color: rgb(0, 0, 0),
+                opacity: 1
+              });
+            });
+          }
+          
+          // 수정된 PDF 저장
+          const modifiedPdfBytes = await pdfDoc.save();
+          const modifiedBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+          
+          const modifiedFile = new File(
+            [modifiedBlob], 
+            file.name.replace('.pdf', '-개인정보제거.pdf'),
+            { type: 'application/pdf' }
+          );
+          
+          setFile(modifiedFile);
+          setMaskAreas({});
+          setMaskingMode(null);
+          setSelectedPII([]);
+          
+          showToast(`✅ ${itemsWithMasks.length}개 항목의 개인정보를 제거했습니다.`);
+          
+          // 재분석
+          handleFileSelect(modifiedFile);
+          
+        } catch (error) {
+          console.error('개인정보 제거 중 오류:', error);
+          showToast('❌ 개인정보 제거 중 오류가 발생했습니다.');
+        } finally {
+          setRemovingPII(false);
+        }
+      };
+
+      // 개인정보 제거 (검은색 박스로 덮기) - 개선 버전
+      const removePersonalInfo = async () => {
+        if (selectedPII.length === 0) {
+          showToast('⚠️ 제거할 개인정보를 선택해주세요.');
+          return;
+        }
+
+        setRemovingPII(true);
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const { PDFDocument, rgb } = window.PDFLib;
+          const pdfDoc = await PDFDocument.load(arrayBuffer);
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+          // 선택된 개인정보 항목들
+          const itemsToRemove = detectedPII.filter(item => 
+            selectedPII.includes(item.id)
+          );
+
+          // 페이지별로 그룹화
+          const pageGroups = {};
+          itemsToRemove.forEach(item => {
+            if (!pageGroups[item.page]) {
+              pageGroups[item.page] = [];
+            }
+            pageGroups[item.page].push(item);
+          });
+
+          // 각 페이지 처리
+          for (const [pageNum, items] of Object.entries(pageGroups)) {
+            const pageIndex = parseInt(pageNum) - 1;
+            const page = await pdf.getPage(parseInt(pageNum));
+            const pdfLibPage = pdfDoc.getPage(pageIndex);
+            const content = await page.getTextContent();
+            const { height } = pdfLibPage.getSize();
+
+            // 각 항목 처리
+            for (const item of items) {
+              const searchText = item.value;
+              let foundPositions = [];
+
+              // 텍스트 아이템에서 위치 찾기
+              content.items.forEach((textItem, idx) => {
+                const itemText = textItem.str;
+                
+                // 정확한 매치 또는 포함 여부 확인
+                if (itemText.includes(searchText) || 
+                    new RegExp(item.pattern.source, 'i').test(itemText)) {
+                  
+                  const transform = textItem.transform;
+                  const x = transform[4];
+                  const y = transform[5];
+                  const fontSize = transform[0]; // 대략적인 폰트 크기
+                  
+                  // 텍스트 너비 추정
+                  let estimatedWidth = searchText.length * fontSize * 0.6;
+                  
+                  // 서명의 경우 더 큰 영역
+                  if (item.isSignature) {
+                    estimatedWidth = Math.max(150, estimatedWidth);
+                    const estimatedHeight = Math.max(60, fontSize * 3);
+                    
+                    foundPositions.push({
+                      x: x - 5,
+                      y: height - y - estimatedHeight,
+                      width: estimatedWidth + 10,
+                      height: estimatedHeight
+                    });
+                  } else {
+                    const estimatedHeight = Math.max(fontSize * 1.5, 12);
+                    
+                    foundPositions.push({
+                      x: x - 2,
+                      y: height - y - estimatedHeight * 0.8,
+                      width: estimatedWidth + 4,
+                      height: estimatedHeight
+                    });
+                  }
+                }
+              });
+
+              // 찾은 위치에 검은색 박스 그리기
+              foundPositions.forEach(pos => {
+                pdfLibPage.drawRectangle({
+                  x: pos.x,
+                  y: pos.y,
+                  width: pos.width,
+                  height: pos.height,
+                  color: rgb(0, 0, 0),
+                  opacity: 1
+                });
+              });
+            }
+          }
+
+          // 수정된 PDF를 새 파일로 저장
+          const modifiedPdfBytes = await pdfDoc.save();
+          const modifiedBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+          
+          // 기존 파일 대체
+          const modifiedFile = new File(
+            [modifiedBlob], 
+            file.name.replace('.pdf', '-개인정보제거.pdf'),
+            { type: 'application/pdf' }
+          );
+          
+          setFile(modifiedFile);
+          setSelectedPII([]);
+          
+          showToast(`✅ ${selectedPII.length}개 항목의 개인정보를 제거했습니다.`);
+          
+          // 재분석
+          handleFileSelect(modifiedFile);
+          
+        } catch (error) {
+          console.error('개인정보 제거 중 오류:', error);
+          showToast('❌ 개인정보 제거 중 오류가 발생했습니다. 일부 항목은 수동으로 제거해야 할 수 있습니다.');
+        } finally {
+          setRemovingPII(false);
+        }
+      };
+
+      // 전체 미리보기 로드 (병렬 처리)
+      const loadAllPreviews = async () => {
+        showToast('⏳ 전체 미리보기 생성 중...');
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          
+          // 모든 분할의 페이지 수집
+          const pagesToLoad = new Set();
+          splits.forEach(split => {
+            pagesToLoad.add(split.startPage);
+            pagesToLoad.add(split.endPage);
+          });
+          
+          // 병렬로 썸네일 생성
+          const thumbnailPromises = Array.from(pagesToLoad).map(async (pageNum) => {
+            return {
+              pageNum,
+              dataUrl: await generateThumbnail(pdf, pageNum)
+            };
+          });
+          
+          const thumbnails = await Promise.all(thumbnailPromises);
+          
+          // 각 분할에 맞게 캐시 저장
+          const newCache = { ...previewCache };
+          splits.forEach(split => {
+            const startThumb = thumbnails.find(t => t.pageNum === split.startPage)?.dataUrl;
+            const endThumb = thumbnails.find(t => t.pageNum === split.endPage)?.dataUrl;
+            
+            if (startThumb && endThumb) {
+              newCache[split.id] = { start: startThumb, end: endThumb };
+            }
+          });
+          
+          setPreviewCache(newCache);
+          showToast(`✅ 전체 미리보기 생성 완료! (${pagesToLoad.size}개 페이지)`);
+          
+        } catch (error) {
+          console.error('전체 미리보기 생성 오류:', error);
+          showToast('❌ 전체 미리보기 생성 중 오류가 발생했습니다.');
+        }
+      };
+
+      // 선택적 미리보기 로드
+      const loadPreview = async (splitId, startPage, endPage) => {
+        if (previewCache[splitId]) return; // 이미 로드됨
+        
+        setLoadingPreviews(prev => ({ ...prev, [splitId]: true }));
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          
+          const [startThumb, endThumb] = await Promise.all([
+            generateThumbnail(pdf, startPage),
+            generateThumbnail(pdf, endPage)
+          ]);
+          
+          setPreviewCache(prev => ({
+            ...prev,
+            [splitId]: { start: startThumb, end: endThumb }
+          }));
+        } catch (error) {
+          console.error('미리보기 생성 오류:', error);
+          showToast('미리보기 생성 중 오류가 발생했습니다.');
+        } finally {
+          setLoadingPreviews(prev => ({ ...prev, [splitId]: false }));
+        }
+      };
+
+      const calculateSplitSize = (startPage, endPage) => {
+        const pageCount = endPage - startPage + 1;
+        const estimatedSize = (avgPageSize * pageCount) / (1024 * 1024);
+        return estimatedSize.toFixed(2);
+      };
+
+      // 빠른 목차 감지 (샘플링)
+      const detectTableOfContents = async (pdf, totalPages) => {
+        const tocPatterns = [
+          /목\s*차|contents|table of contents|차\s*례/i,
+          /제\s*\d+\s*장|chapter\s*\d+|section\s*\d+/gi
+        ];
+
+        let hasTOC = false;
+        const tocItems = [];
+        
+        // 첫 10페이지만 샘플링
+        const samplePages = Math.min(10, totalPages);
+        
+        for (let i = 1; i <= samplePages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+          
+          // 목차 키워드 확인
+          if (!hasTOC && tocPatterns[0].test(pageText)) {
+            hasTOC = true;
+          }
+          
+          if (hasTOC) {
+            const lines = pageText.split('\n');
+            for (const line of lines) {
+              const trimmed = line.trim();
+              
+              const match1 = trimmed.match(/^(제?\s*\d+[장절]?\.?\s+|Chapter\s+\d+\.?\s+|\d+\.\s+)(.+?)\.{2,}(\d+)/i);
+              const match2 = trimmed.match(/^([가-힣a-zA-Z\s]{3,40})\.{2,}(\d+)$/);
+              
+              if (match1) {
+                const title = match1[2].trim();
+                const pageNum = parseInt(match1[3]);
+                if (pageNum > 0 && pageNum <= totalPages) {
+                  tocItems.push({ title, page: pageNum });
+                }
+              } else if (match2) {
+                const title = match2[1].trim();
+                const pageNum = parseInt(match2[2]);
+                if (pageNum > 0 && pageNum <= totalPages) {
+                  tocItems.push({ title, page: pageNum });
+                }
+              }
+            }
+          }
+        }
+        
+        // 목차 없으면 샘플링으로 챕터 찾기
+        if (tocItems.length === 0) {
+          const sampleInterval = Math.max(Math.floor(totalPages / 10), 1);
+          
+          for (let i = 1; i <= totalPages; i += sampleInterval) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map(item => item.str).join(' ');
+            const lines = pageText.split('\n');
+            
+            for (const line of lines.slice(0, 5)) {
+              const trimmed = line.trim();
+              const chapterMatch = trimmed.match(/^(제\s*\d+\s*[장절]|Chapter\s+\d+|Section\s+\d+)\s*[:.]\s*(.+)/i);
+              if (chapterMatch) {
+                tocItems.push({
+                  title: chapterMatch[2].trim() || chapterMatch[1].trim(),
+                  page: i
+                });
+                break;
+              }
+            }
+          }
+        }
+
+        return { hasTOC, tocItems: tocItems.slice(0, 20) };
+      };
+
+      const createSmartSplits = async (totalPages, avgSize, tocItems, pdf) => {
+        const maxSizeBytes = 200 * 1024 * 1024;
+        const maxPagesBySize = Math.floor(maxSizeBytes / avgSize);
+        const maxPages = Math.min(30, maxPagesBySize);
+        
+        const splits = [];
+        
+        if (tocItems.length > 0) {
+          for (let i = 0; i < tocItems.length; i++) {
+            const tocItem = tocItems[i];
+            const nextPage = i < tocItems.length - 1 ? tocItems[i + 1].page : totalPages + 1;
+            const sectionPages = nextPage - tocItem.page;
+            
+            if (sectionPages > maxPages) {
+              let chunkStart = tocItem.page;
+              let partNum = 1;
+              
+              while (chunkStart < nextPage) {
+                const chunkEnd = Math.min(chunkStart + maxPages - 1, nextPage - 1);
+                splits.push({
+                  id: Date.now() + splits.length,
+                  startPage: chunkStart,
+                  endPage: chunkEnd,
+                  title: partNum === 1 ? tocItem.title : `${tocItem.title} (Part ${partNum})`
+                });
+                chunkStart = chunkEnd + 1;
+                partNum++;
+              }
+            } else {
+              splits.push({
+                id: Date.now() + splits.length,
+                startPage: tocItem.page,
+                endPage: nextPage - 1,
+                title: tocItem.title
+              });
+            }
+          }
+          
+          if (splits.length > 0 && splits[0].startPage > 1) {
+            splits.unshift({
+              id: Date.now(),
+              startPage: 1,
+              endPage: splits[0].startPage - 1,
+              title: '서문 및 목차'
+            });
+          }
+        } else {
+          // 목차 없을 때: 빠른 패턴 분석
+          try {
+            showToast('📊 목차가 없어 패턴 분석 중...');
+            
+            const detectedChapters = [];
+            
+            // 샘플링: 10페이지마다 체크 (속도 최적화)
+          const step = Math.max(1, Math.floor(totalPages / 20));
+          
+          for (let pageNum = 1; pageNum <= totalPages; pageNum += step) {
+            const page = await pdf.getPage(Math.min(pageNum, totalPages));
+            const content = await page.getTextContent();
+            
+            // 텍스트 아이템을 Y 좌표로 정렬
+            const items = content.items.sort((a, b) => b.transform[5] - a.transform[5]);
+            
+            // 상위 3개만 검사
+            for (let i = 0; i < Math.min(3, items.length); i++) {
+              const item = items[i];
+              const text = item.str.trim();
+              const fontSize = item.transform[0];
+              
+              if (!text || text.length < 3) continue;
+              
+              // 패턴: 챕터/장 번호
+              const chapterPattern = /^(제?\s*\d+\s*장|Chapter\s+\d+|Part\s+\d+|Section\s+\d+|\d+\s*\.|\d+장|제\d+절)/i;
+              const isLargeFont = fontSize > 13;
+              const isShortText = text.length < 60;
+              
+              if (chapterPattern.test(text) || (isLargeFont && isShortText && fontSize > 15)) {
+                detectedChapters.push({
+                  page: pageNum,
+                  title: text.substring(0, 50) // 길이 제한
+                });
+                break;
+              }
+            }
+          }
+          
+          // 감지된 챕터로 분할
+          if (detectedChapters.length > 1) {
+            for (let i = 0; i < detectedChapters.length; i++) {
+              const chapter = detectedChapters[i];
+              const nextChapter = detectedChapters[i + 1];
+              const endPage = nextChapter ? nextChapter.page - 1 : totalPages;
+              
+              splits.push({
+                id: Date.now() + i,
+                startPage: chapter.page,
+                endPage: endPage,
+                title: chapter.title
+              });
+            }
+            showToast(`✅ ${detectedChapters.length}개 구간 자동 감지!`);
+          } else {
+            // 패턴 미감지: 기본 분할로 폴백
+            throw new Error('패턴 미감지');
+          }
+          } catch (error) {
+            // 패턴 분석 실패 시 기본 분할
+            console.log('패턴 분석 실패, 기본 분할 적용:', error.message);
+            let currentPage = 1;
+            let splitNumber = 1;
+
+            while (currentPage <= totalPages) {
+              const endPage = Math.min(currentPage + maxPages - 1, totalPages);
+              
+              splits.push({
+                id: Date.now() + splitNumber,
+                startPage: currentPage,
+                endPage: endPage,
+                title: `Part ${splitNumber}`
+              });
+              currentPage = endPage + 1;
+              splitNumber++;
+            }
+          }
+        }
+        
+        return validateAndAdjustSplits(splits, avgSize, totalPages);
+      };
+
+      const validateAndAdjustSplits = (splits, avgSize, totalPages) => {
+        const maxSizeBytes = 200 * 1024 * 1024;
+        const maxPagesBySize = Math.floor(maxSizeBytes / avgSize);
+        const maxPages = Math.min(30, maxPagesBySize); // 30페이지 또는 200MB 중 작은 값
+        
+        const adjustedSplits = [];
+        
+        splits.forEach((split) => {
+          const pageCount = split.endPage - split.startPage + 1;
+          
+          // 30페이지 또는 200MB를 초과하는 경우 분할
+          if (pageCount > maxPages) {
+            let currentStart = split.startPage;
+            let partNum = 1;
+            
+            while (currentStart <= split.endPage) {
+              const currentEnd = Math.min(currentStart + maxPages - 1, split.endPage);
+              
+              // 제목 형식: 첫 번째는 원본, 나머지는 (1), (2), (3)...
+              const partTitle = partNum === 1 
+                ? split.title 
+                : `${split.title} (${partNum})`;
+              
+              adjustedSplits.push({
+                id: Date.now() + adjustedSplits.length,
+                startPage: currentStart,
+                endPage: currentEnd,
+                title: partTitle
+              });
+              currentStart = currentEnd + 1;
+              partNum++;
+            }
+          } else {
+            adjustedSplits.push({
+              id: Date.now() + adjustedSplits.length,
+              ...split
+            });
+          }
+        });
+        
+        return adjustedSplits;
+      };
+
+      const handleFileSelect = async (selectedFile) => {
+        setFile(selectedFile);
+        setAnalyzing(true);
+        setSplits([]);
+        setResults([]);
+        setPreviewCache({});
+        setDetectedPII([]);
+        setSelectedPII([]);
+        
+        try {
+          const arrayBuffer = await selectedFile.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          setPdfDoc(pdf);
+          const totalPages = pdf.numPages;
+          
+          const avgSize = selectedFile.size / totalPages;
+          setAvgPageSize(avgSize);
+
+          setPdfInfo({
+            name: selectedFile.name,
+            pages: totalPages,
+            size: (selectedFile.size / 1024 / 1024).toFixed(2)
+          });
+
+          // 빠른 분석
+          const tocDetection = await detectTableOfContents(pdf, totalPages);
+          const suggestions = await createSmartSplits(totalPages, avgSize, tocDetection.tocItems, pdf);
+          
+          setSplits(suggestions);
+          
+          // 개인정보 탐지 (백그라운드)
+          detectPersonalInfo(pdf, totalPages).then(piiItems => {
+            setDetectedPII(piiItems);
+            if (piiItems.length > 0) {
+              showToast(`🔍 ${piiItems.length}개의 개인정보가 탐지되었습니다.`);
+            }
+          });
+          
+          if (tocDetection.hasTOC) {
+            showToast(`📚 목차를 감지했습니다! ${tocDetection.tocItems.length}개 섹션 발견`);
+          } else {
+            showToast(`✅ 분석 완료! ${suggestions.length}개 파일로 분할 제안`);
+          }
+          
+        } catch (error) {
+          console.error('PDF 분석 중 오류:', error);
+          showToast('PDF 분석 중 오류가 발생했습니다.');
+        } finally {
+          setAnalyzing(false);
+        }
+      };
+
+      const updateSplit = (id, field, value) => {
+        setSplits(splits.map(split => 
+          split.id === id ? { ...split, [field]: value } : split
+        ));
+      };
+
+      const deleteSplit = (id) => {
+        setSplits(splits.filter(split => split.id !== id));
+        // 미리보기 캐시도 삭제
+        setPreviewCache(prev => {
+          const newCache = { ...prev };
+          delete newCache[id];
+          return newCache;
+        });
+      };
+
+      const addSplit = () => {
+        const lastSplit = splits[splits.length - 1];
+        const newStartPage = lastSplit ? lastSplit.endPage + 1 : 1;
+        
+        if (newStartPage > pdfInfo.pages) {
+          showToast('⚠️ 더 이상 추가할 페이지가 없습니다.');
+          return;
+        }
+        
+        setSplits([...splits, {
+          id: Date.now(),
+          startPage: newStartPage,
+          endPage: Math.min(newStartPage + 29, pdfInfo.pages),
+          title: `Part ${splits.length + 1}`
+        }]);
+      };
+
+      const processSplits = async () => {
+        if (splits.length === 0) return;
+        
+        const oversized = splits.filter(split => {
+          const size = parseFloat(calculateSplitSize(split.startPage, split.endPage));
+          return size > 100;
+        });
+        
+        if (oversized.length > 0) {
+          showToast('⚠️ 일부 분할이 200MB를 초과합니다. 페이지 범위를 조정해주세요.');
+          return;
+        }
+        
+        setProcessing(true);
+        setProgress(0);
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+          const generatedFiles = [];
+
+          for (let i = 0; i < splits.length; i++) {
+            const split = splits[i];
+            const newPdf = await PDFLib.PDFDocument.create();
+            
+            for (let pageNum = split.startPage - 1; pageNum < split.endPage; pageNum++) {
+              const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageNum]);
+              newPdf.addPage(copiedPage);
+            }
+
+            const pdfBytes = await newPdf.save();
+            const cleanTitle = split.title.replace(/[<>:"/\\|?*]/g, '-');
+            const originalName = file.name.replace('.pdf', '');
+            const fileName = `${originalName}-(${String(i + 1).padStart(2, '0')})${cleanTitle}.pdf`;
+            
+            generatedFiles.push({
+              name: fileName,
+              blob: new Blob([pdfBytes], { type: 'application/pdf' }),
+              size: (pdfBytes.length / 1024 / 1024).toFixed(2)
+            });
+
+            setProgress(((i + 1) / splits.length) * 100);
+          }
+
+          setResults(generatedFiles);
+          showToast('✅ PDF 분할이 완료되었습니다!');
+          
+        } catch (error) {
+          console.error('PDF 분할 중 오류:', error);
+          showToast('❌ PDF 분할 중 오류가 발생했습니다.');
+        } finally {
+          setProcessing(false);
+        }
+      };
+
+      const downloadAll = async () => {
+        const zip = new JSZip();
+        
+        results.forEach(file => {
+          zip.file(file.name, file.blob);
+        });
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${file.name.replace('.pdf', '')}-분할.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('📦 모든 파일 다운로드 완료!');
+      };
+
+      const downloadSingle = (fileData) => {
+        const url = URL.createObjectURL(fileData.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileData.name;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const reset = () => {
+        setFile(null);
+        setPdfDoc(null);
+        setPdfInfo(null);
+        setSplits([]);
+        setResults([]);
+        setProgress(0);
+        setPreviewCache({});
+        setLoadingPreviews({});
+        setDetectedPII([]);
+        setSelectedPII([]);
+        setMaskAreas({});
+        setMaskingMode(null);
+        setShowOnlySelected(false);
+      };
+
+      return (
+        <div className="app-container">
+          <div className="header">
+            <div className="logo">⚡ Quick Splitter for NotebookLM</div>
+            <div className="subtitle">30페이지 & 200MB 제한으로 스마트하게 문서를 분할하세요</div>
+            <div className="badge">⚡ 초고속 분석 · 선택적 미리보기</div>
+          </div>
+
+          {!file && (
+            <div className="upload-section">
+              <div 
+                className={`upload-area ${isDragging ? 'dragover' : ''}`}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="upload-icon">📄</div>
+                <div className="upload-text">PDF 파일을 드래그하거나 클릭하여 업로드</div>
+                <div className="upload-hint">100% 로컬 처리 - 파일이 외부로 전송되지 않습니다</div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => e.target.files[0] && handleFileSelect(e.target.files[0])}
+              />
+            </div>
+          )}
+
+          {analyzing && (
+            <div className="analysis-section">
+              <div className="loading">
+                <div className="spinner"></div>
+                <div>문서를 분석하고 있습니다...</div>
+                <div style={{marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem'}}>
+                  썸네일은 생성하지 않으므로 매우 빠릅니다 ⚡
+                </div>
+              </div>
+            </div>
+          )}
+
+          {pdfInfo && !analyzing && splits.length > 0 && (
+            <div className="analysis-section">
+              <div className="section-title">
+                <span>📊</span>
+                <span>문서 정보 및 분할 제안</span>
+              </div>
+              
+              <div className="file-info">
+                <div className="file-name">{pdfInfo.name}</div>
+                <div className="file-meta">
+                  <span>📄 {pdfInfo.pages} 페이지</span>
+                  <span>💾 {pdfInfo.size} MB</span>
+                  <span>✂️ {splits.length}개 파일로 분할 예정</span>
+                </div>
+              </div>
+
+              <div className="info-box">
+                💡 <strong>사용 팁:</strong> 각 분할의 소제목으로 내용을 미리 파악할 수 있습니다. 
+                개별 "미리보기" 버튼으로 확인하거나, "분할 전체 미리보기"로 모든 분할을 한번에 확인하세요.
+              </div>
+
+              <div className="split-list">
+                {splits.map((split, index) => {
+                  const estimatedSize = calculateSplitSize(split.startPage, split.endPage);
+                  const isOversized = parseFloat(estimatedSize) > 100;
+                  const hasPreview = previewCache[split.id];
+                  const isLoadingPreview = loadingPreviews[split.id];
+                  
+                  return (
+                    <div key={split.id} className="split-item">
+                      <div className="split-header">
+                        <div className="split-title-display">
+                          <span className="split-number">{index + 1}</span>
+                          <span className="split-title-text">{split.title}</span>
+                        </div>
+                      </div>
+
+                      <div className="split-controls-row">
+                        <input
+                          type="text"
+                          className="split-title-input"
+                          value={split.title}
+                          onChange={(e) => updateSplit(split.id, 'title', e.target.value)}
+                          placeholder="소제목 편집"
+                        />
+                        <div className="split-controls">
+                          <button
+                            className="icon-button preview"
+                            onClick={() => loadPreview(split.id, split.startPage, split.endPage)}
+                            disabled={isLoadingPreview || hasPreview}
+                            title="미리보기 로드"
+                          >
+                            {isLoadingPreview ? '⏳' : hasPreview ? '✅' : '🖼️'} 
+                            {hasPreview ? '로드됨' : '미리보기'}
+                          </button>
+                          <button
+                            className="icon-button delete"
+                            onClick={() => deleteSplit(split.id)}
+                            title="삭제"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="split-info">
+                        <div className="page-range">
+                          <input
+                            type="number"
+                            className="page-input"
+                            value={split.startPage}
+                            min="1"
+                            max={pdfInfo.pages}
+                            onChange={(e) => updateSplit(split.id, 'startPage', parseInt(e.target.value) || 1)}
+                          />
+                          <span>~</span>
+                          <input
+                            type="number"
+                            className="page-input"
+                            value={split.endPage}
+                            min={split.startPage}
+                            max={pdfInfo.pages}
+                            onChange={(e) => updateSplit(split.id, 'endPage', parseInt(e.target.value) || split.startPage)}
+                          />
+                          <span>페이지</span>
+                        </div>
+                        <div>📑 {split.endPage - split.startPage + 1}페이지</div>
+                        <div className={`file-size ${isOversized ? 'warning' : 'ok'}`}>
+                          {isOversized ? '⚠️' : '✅'} {estimatedSize} MB
+                          {isOversized && <span style={{marginLeft: '0.5rem', fontSize: '0.85rem'}}>(200MB 초과!)</span>}
+                        </div>
+                      </div>
+                      
+                      {isLoadingPreview && (
+                        <div className="preview-section">
+                          <div className="preview-loading">
+                            <div className="spinner"></div>
+                            <div>미리보기 생성 중...</div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {hasPreview && (
+                        <div className="preview-section">
+                          <div className="preview-grid">
+                            <div className="page-preview split-start">
+                              <img 
+                                src={previewCache[split.id].start} 
+                                alt={`Page ${split.startPage}`}
+                                className="page-preview-image"
+                              />
+                              <div className="page-number">페이지 {split.startPage}</div>
+                              <div className="page-marker">시작</div>
+                            </div>
+                            <div className="page-preview split-end">
+                              <img 
+                                src={previewCache[split.id].end} 
+                                alt={`Page ${split.endPage}`}
+                                className="page-preview-image"
+                              />
+                              <div className="page-number">페이지 {split.endPage}</div>
+                              <div className="page-marker end">끝</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {detectedPII.length > 0 && (
+                <div className="pii-section">
+                  <div className="pii-header">
+                    <div className="pii-title">
+                      <span>🔒</span>
+                      <span>개인정보 탐지</span>
+                      <span className="pii-count">{detectedPII.length}개 발견</span>
+                    </div>
+                  </div>
+                  
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.1))',
+                    padding: '1rem',
+                    borderRadius: '8px',
+                    marginBottom: '1rem',
+                    fontSize: '0.9rem',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    ⚠️ <strong>주의:</strong> 서명 및 개인정보가 감지되었습니다. 
+                    제거 기능은 텍스트 위치를 기반으로 검은색 박스로 덮습니다. 
+                    제거 후 반드시 PDF를 열어서 확인하시기 바랍니다.
+                  </div>
+                  
+                  <div className="pii-list">
+                    {detectedPII.map(item => {
+                      const hasMasks = maskAreas[item.id] && maskAreas[item.id].length > 0;
+                      
+                      return (
+                        <div 
+                          key={item.id}
+                          className={`pii-item ${selectedPII.includes(item.id) ? 'selected' : ''}`}
+                          style={item.isSignature ? {
+                            borderColor: 'rgba(239, 68, 68, 0.5)',
+                            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(245, 158, 11, 0.05))'
+                          } : {}}
+                        >
+                          <input
+                            type="checkbox"
+                            className="pii-checkbox"
+                            checked={selectedPII.includes(item.id)}
+                            onChange={() => {
+                              if (selectedPII.includes(item.id)) {
+                                setSelectedPII(selectedPII.filter(id => id !== item.id));
+                              } else {
+                                setSelectedPII([...selectedPII, item.id]);
+                              }
+                            }}
+                          />
+                          <div className="pii-content" style={{ flex: 1 }}>
+                            <div className="pii-type">
+                              {item.icon} {item.typeName} (페이지 {item.page})
+                              {item.isSignature && <span style={{
+                                marginLeft: '0.5rem',
+                                background: 'var(--danger)',
+                                color: 'white',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: '600'
+                              }}>중요</span>}
+                              {hasMasks && <span style={{
+                                marginLeft: '0.5rem',
+                                background: 'var(--success)',
+                                color: 'white',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: '600'
+                              }}>✓ {maskAreas[item.id].length}개 영역</span>}
+                            </div>
+                            <div className="pii-value">{item.value}</div>
+                          </div>
+                          <button
+                            className="icon-button mask"
+                            onClick={() => startManualMasking(item)}
+                            title="직접 가리기"
+                          >
+                            🖌️ 직접 가리기
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pii-actions">
+                    <button 
+                      className="pii-button pii-button-select"
+                      onClick={() => {
+                        if (selectedPII.length === detectedPII.length) {
+                          setSelectedPII([]);
+                        } else {
+                          setSelectedPII(detectedPII.map(item => item.id));
+                        }
+                      }}
+                    >
+                      {selectedPII.length === detectedPII.length ? '전체 해제' : '전체 선택'}
+                    </button>
+                    {selectedPII.length > 0 && (
+                      <button 
+                        className="pii-button pii-button-select"
+                        onClick={() => setShowOnlySelected(!showOnlySelected)}
+                        style={{ 
+                          background: showOnlySelected ? 'var(--primary)' : 'transparent',
+                          color: showOnlySelected ? '#0a0a0a' : 'var(--text)'
+                        }}
+                      >
+                        {showOnlySelected ? '✓ 선택 항목만 보기' : '📋 체크한 항목 전체보기'}
+                      </button>
+                    )}
+                    <button 
+                      className="pii-button pii-button-remove"
+                      onClick={applyManualMasking}
+                      disabled={Object.keys(maskAreas).filter(id => maskAreas[id]?.length > 0).length === 0 || removingPII}
+                    >
+                      {removingPII ? '⏳ 처리 중...' : `✅ 마스킹 적용 (${Object.keys(maskAreas).filter(id => maskAreas[id]?.length > 0).length}개)`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {maskingMode && (
+                <div className="masking-modal">
+                  <div className="masking-container">
+                    <div className="masking-header">
+                      <div className="masking-title">
+                        <span>🖌️</span>
+                        <span>개인정보 마스킹 도구</span>
+                      </div>
+                      <button 
+                        className="masking-close"
+                        onClick={() => setMaskingMode(null)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    
+                    <div className="masking-content">
+                      {detectedPII.length > 1 && (
+                        <div className="masking-nav">
+                          <div className="masking-nav-title">
+                            {showOnlySelected 
+                              ? `체크한 항목 (${selectedPII.length}개)`
+                              : `개인정보 목록 (${detectedPII.length}개)`
+                            }
+                          </div>
+                          {detectedPII
+                            .filter(item => !showOnlySelected || selectedPII.includes(item.id))
+                            .map(item => {
+                              const hasMasks = maskAreas[item.id] && maskAreas[item.id].length > 0;
+                              const isActive = maskingMode.id === item.id;
+                              
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`masking-nav-item ${isActive ? 'active' : ''}`}
+                                  onClick={() => startManualMasking(item)}
+                                >
+                                  <div className="masking-nav-item-header">
+                                    <span>{item.icon}</span>
+                                    <span className="masking-nav-item-title">{item.typeName}</span>
+                                    {hasMasks && (
+                                      <span className="masking-nav-item-status">
+                                        ✓ {maskAreas[item.id].length}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="masking-nav-item-info">
+                                    페이지 {item.page} • {item.value.length > 20 ? item.value.substring(0, 20) + '...' : item.value}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          }
+                        </div>
+                      )}
+                      
+                      <div className="masking-body">
+                        <div className="masking-info">
+                          💡 <strong>사용 방법:</strong> 노란색으로 표시된 영역이 탐지된 위치입니다. 
+                          마우스로 드래그하여 가릴 영역을 선택하세요.
+                        </div>
+                        
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.75rem 1rem',
+                          background: 'var(--bg)',
+                          borderRadius: '8px',
+                          marginBottom: '1rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '1.5rem' }}>{maskingMode.icon}</span>
+                            <div>
+                              <div style={{ fontWeight: '600', color: 'var(--text)' }}>
+                                {maskingMode.typeName}
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                페이지 {maskingMode.page} • {maskingMode.value}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="masking-canvas-container">
+                          <canvas
+                            ref={canvasRef}
+                            className="masking-canvas"
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                          />
+                        </div>
+                        
+                        {maskAreas[maskingMode.id] && maskAreas[maskingMode.id].length > 0 && (
+                          <div>
+                            <div style={{ 
+                              fontWeight: '600', 
+                              marginBottom: '0.5rem',
+                              color: 'var(--text)'
+                            }}>
+                              마스킹 영역 ({maskAreas[maskingMode.id].length}개)
+                            </div>
+                            <div className="masking-areas-list">
+                              {maskAreas[maskingMode.id].map((area, idx) => (
+                                <div key={idx} className="masking-area-item">
+                                  <span>
+                                    영역 {idx + 1}: {Math.round(area.width)}x{Math.round(area.height)}px
+                                  </span>
+                                  <button
+                                    className="masking-area-remove"
+                                    onClick={() => removeMaskArea(maskingMode.id, idx)}
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="masking-footer">
+                      <button 
+                        className="button button-secondary"
+                        onClick={() => setMaskingMode(null)}
+                      >
+                        닫기
+                      </button>
+                      <button 
+                        className="button button-primary"
+                        onClick={() => {
+                          setMaskingMode(null);
+                          showToast('✅ 마스킹 영역이 저장되었습니다. "마스킹 적용" 버튼을 눌러주세요.');
+                        }}
+                      >
+                        완료
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="action-section">
+                <button className="button button-secondary" onClick={addSplit}>
+                  ➕ 분할 추가
+                </button>
+                <button 
+                  className="button button-secondary" 
+                  onClick={loadAllPreviews}
+                  disabled={Object.keys(previewCache).length === splits.length}
+                >
+                  {Object.keys(previewCache).length === splits.length ? '✅ 전체 로드됨' : '🖼️ 분할 전체 미리보기'}
+                </button>
+                <button
+                  className="button button-primary"
+                  onClick={processSplits}
+                  disabled={processing}
+                >
+                  {processing ? '⏳ 처리 중...' : '✂️ 분할 시작'}
+                </button>
+                <button className="button button-secondary" onClick={reset}>
+                  🔄 새로 시작
+                </button>
+              </div>
+            </div>
+          )}
+
+          {processing && (
+            <div className="progress-section">
+              <div className="section-title">
+                <span>⚙️</span>
+                <span>PDF 분할 진행 중...</span>
+              </div>
+              <div className="progress-bar-container">
+                <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+              </div>
+              <div className="progress-text">{Math.round(progress)}% 완료</div>
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <div className="results-section">
+              <div className="section-title">
+                <span>✅</span>
+                <span>분할 완료 - 클릭하여 다운로드</span>
+              </div>
+              
+              {results.map((result, index) => (
+                <div
+                  key={index}
+                  className="result-item"
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span className="result-name">{result.name}</span>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <span style={{ 
+                      color: parseFloat(result.size) > 200 ? 'var(--danger)' : 'var(--success)', 
+                      fontSize: '0.9rem',
+                      fontWeight: '600'
+                    }}>
+                      {result.size} MB
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadSingle(result);
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #d4af37, #f4d03f)',
+                        color: '#0a0a0a',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+                      onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                    >
+                      ⬇️ 다운로드
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="action-section">
+                <div style={{
+                  padding: '1rem 1.5rem',
+                  background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(244, 208, 63, 0.05))',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(212, 175, 55, 0.3)',
+                  marginBottom: '1rem'
+                }}>
+                  <div style={{ fontSize: '0.95rem', color: 'var(--text)', marginBottom: '0.5rem' }}>
+                    💡 <strong>다운로드 방법</strong>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    각 파일 우측의 ⬇️ 버튼을 클릭하여 개별적으로 다운로드하세요.
+                  </div>
+                </div>
+                <button className="button button-secondary" onClick={reset}>
+                  🔄 새로 시작
+                </button>
+              </div>
+            </div>
+          )}
+
+          {toast && (
+            <div className="toast">
+              <span>{toast.includes('❌') || toast.includes('⚠️') ? '⚠️' : '✅'}</span>
+              <span>{toast}</span>
+            </div>
+          )}
+
+          <div className="app-footer">
+            <div className="footer-content">
+              <div className="footer-title">
+                <span>⚡</span>
+                <span>Quick Splitter for NotebookLM</span>
+              </div>
+              <div className="footer-divider"></div>
+              <div className="footer-contact">
+                Made by <strong>MJ LEE</strong>
+              </div>
+              <div className="footer-contact" style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                <a href="mailto:lang2kmj@gmail.com" className="footer-email">lang2kmj@gmail.com</a>
+              </div>
+              <div className="footer-contact" style={{ 
+                marginTop: '1rem', 
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)'
+              }}>
+                🔒 이 도구는 사용자의 로컬 컴퓨터에서 작동되며, 개인정보를 수집하지 않습니다.
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
