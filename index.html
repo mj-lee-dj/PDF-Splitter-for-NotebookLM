@@ -2760,20 +2760,18 @@
               ))}
 
               <div className="action-section">
-                <div style={{
-                  padding: '1rem 1.5rem',
-                  background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(244, 208, 63, 0.05))',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(212, 175, 55, 0.3)',
-                  marginBottom: '1rem'
-                }}>
-                  <div style={{ fontSize: '0.95rem', color: 'var(--text)', marginBottom: '0.5rem' }}>
-                    💡 <strong>다운로드 방법</strong>
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    각 파일 우측의 ⬇️ 버튼을 클릭하여 개별적으로 다운로드하세요.
-                  </div>
-                </div>
+                <button 
+                  className="button button-primary" 
+                  onClick={downloadAll}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    justifyContent: 'center'
+                  }}
+                >
+                  📦 전체 다운로드 (ZIP)
+                </button>
                 <button className="button button-secondary" onClick={reset}>
                   🔄 새로 시작
                 </button>
