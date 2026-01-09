@@ -269,145 +269,6 @@
       margin: 2rem 0;
     }
 
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      z-index: 2000;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--bg-secondary);
-      padding: 2rem;
-      border-radius: 16px;
-      max-width: 1600px;
-      max-height: 95vh;
-      overflow: auto;
-      border: 1px solid var(--gold);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    .close-button {
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 1.5rem;
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .close-button:hover {
-      background: var(--error);
-      border-color: var(--error);
-    }
-
-    canvas {
-      max-width: 100%;
-      border-radius: 8px;
-      cursor: crosshair;
-    }
-
-    .nav-container {
-      display: flex;
-      gap: 2rem;
-      margin-bottom: 2rem;
-    }
-
-    .nav-sidebar {
-      flex: 0 0 300px;
-      background: var(--bg-secondary);
-      padding: 1.5rem;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-
-    .nav-title {
-      color: var(--gold);
-      font-weight: 600;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .nav-item {
-      padding: 0.75rem;
-      margin-bottom: 0.5rem;
-      background: var(--bg-tertiary);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid transparent;
-    }
-
-    .nav-item:hover {
-      border-color: var(--gold);
-      transform: translateX(4px);
-    }
-
-    .nav-item.active {
-      background: var(--accent);
-      border-color: var(--gold);
-    }
-
-    .nav-item-number {
-      color: var(--gold);
-      font-weight: 600;
-      margin-right: 0.5rem;
-    }
-
-    .nav-item-text {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    .main-content {
-      flex: 1;
-    }
-
-    .pii-highlight {
-      position: absolute;
-      border: 3px solid var(--gold);
-      background: rgba(212, 175, 55, 0.2);
-      cursor: pointer;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.6; }
-      50% { opacity: 1; }
-    }
-
-    .filter-section {
-      margin-bottom: 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
     .level-badge {
       display: inline-block;
       padding: 0.25rem 0.5rem;
@@ -456,21 +317,8 @@
       const [splits, setSplits] = useState([]);
       const [results, setResults] = useState([]);
       const [toast, setToast] = useState('');
-      const [showMasking, setShowMasking] = useState(false);
-      const [currentMaskingPage, setCurrentMaskingPage] = useState(null);
-      const [detectedPII, setDetectedPII] = useState([]);
-      const [selectedPII, setSelectedPII] = useState([]);
-      const [maskingRects, setMaskingRects] = useState([]);
       const [avgPageSize, setAvgPageSize] = useState(0);
-      const [showOnlySelected, setShowOnlySelected] = useState(false);
       
-      const canvasRef = useRef(null);
-      const [isDrawing, setIsDrawing] = useState(false);
-      const [startPos, setStartPos] = useState(null);
-      const [currentRect, setCurrentRect] = useState(null);
-      const [previewCache, setPreviewCache] = useState({});
-      const [loadingPreviews, setLoadingPreviews] = useState({});
-
       const fileInputRef = useRef(null);
 
       useEffect(() => {
@@ -515,9 +363,6 @@
         setFile(selectedFile);
         setResults([]);
         setSplits([]);
-        setDetectedPII([]);
-        setSelectedPII([]);
-        setPreviewCache({});
         
         showToast('📄 파일 분석 중...');
         
@@ -559,7 +404,7 @@
           // 2단계: 페이지별 구조 분석 (소주제 표지, 상단 제목)
           const pageStructures = await analyzePageStructures(pdf, totalPages, tocItems);
           
-          setProgress(50);
+          setProgress(60);
           setProgressText('분할 포인트 계산 중...');
 
           // 3단계: 스마트 분할 생성
@@ -570,12 +415,6 @@
             pageStructures,
             tocEndPage
           );
-
-          setProgress(70);
-          setProgressText('개인정보 탐지 중...');
-
-          // 4단계: 개인정보 탐지
-          await detectPIIInPDF(pdf, totalPages);
 
           setSplits(smartSplits);
           setProgress(100);
@@ -983,11 +822,14 @@
 
         for (const titlePage of titlePages) {
           if (titlePage.page - currentStart >= 5) {
+            // 제목 페이지의 실제 텍스트를 제목으로 사용
+            const pageTitle = titlePage.topText || (splits.length === 0 ? '서문' : `Part ${splits.length + 1}`);
+            
             splits.push({
               id: Date.now() + splits.length,
               startPage: currentStart,
               endPage: titlePage.page - 1,
-              title: splits.length === 0 ? '서문' : `섹션 ${splits.length + 1}`,
+              title: pageTitle,
               level: 1
             });
             currentStart = titlePage.page;
@@ -996,11 +838,15 @@
 
         // 마지막 구간
         if (currentStart <= totalPages) {
+          const lastTitle = titlePages.length > 0 && titlePages[titlePages.length - 1].topText 
+            ? titlePages[titlePages.length - 1].topText 
+            : `Part ${splits.length + 1}`;
+            
           splits.push({
             id: Date.now() + splits.length,
             startPage: currentStart,
             endPage: totalPages,
-            title: `섹션 ${splits.length + 1}`,
+            title: lastTitle,
             level: 1
           });
         }
@@ -1033,7 +879,7 @@
             id: Date.now() + splits.length,
             startPage: currentStart,
             endPage: currentEnd,
-            title: `구간 ${partNum}`,
+            title: `Part ${partNum}`,
             level: 1
           });
 
@@ -1042,54 +888,6 @@
         }
 
         return splits;
-      };
-
-      // ===========================================
-      // 개인정보 탐지
-      // ===========================================
-
-      const detectPIIInPDF = async (pdf, totalPages) => {
-        const piiList = [];
-        const patterns = [
-          { type: '주민등록번호', regex: /\d{6}[-\s]?[1-4]\d{6}/, severity: 'high' },
-          { type: '전화번호', regex: /01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/, severity: 'medium' },
-          { type: '이메일', regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/, severity: 'medium' },
-          { type: '주소', regex: /[가-힣]+[시도]\s+[가-힣]+[구시군]\s+[가-힣]+[동읍면리]/, severity: 'low' },
-          { type: '계좌번호', regex: /\d{3,4}[-\s]?\d{2,6}[-\s]?\d{2,7}/, severity: 'high' },
-          { type: '카드번호', regex: /\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}/, severity: 'high' },
-          { type: '여권번호', regex: /[A-Z]\d{8}/, severity: 'high' },
-          { type: '운전면허', regex: /\d{2}[-\s]?\d{2}[-\s]?\d{6}[-\s]?\d{2}/, severity: 'medium' },
-          { type: '사업자등록번호', regex: /\d{3}[-\s]?\d{2}[-\s]?\d{5}/, severity: 'medium' }
-        ];
-
-        const samplePages = Math.min(20, totalPages);
-        const step = Math.max(1, Math.floor(totalPages / samplePages));
-
-        for (let pageNum = 1; pageNum <= totalPages; pageNum += step) {
-          try {
-            const page = await pdf.getPage(pageNum);
-            const content = await page.getTextContent();
-            const pageText = content.items.map(item => item.str).join(' ');
-
-            for (const pattern of patterns) {
-              const matches = pageText.match(new RegExp(pattern.regex, 'g'));
-              if (matches) {
-                piiList.push({
-                  id: `pii-${Date.now()}-${piiList.length}`,
-                  type: pattern.type,
-                  page: pageNum,
-                  count: matches.length,
-                  severity: pattern.severity,
-                  sample: matches[0]
-                });
-              }
-            }
-          } catch (error) {
-            console.error(`페이지 ${pageNum} PII 탐지 오류:`, error);
-          }
-        }
-
-        setDetectedPII(piiList);
       };
 
       // ===========================================
@@ -1120,14 +918,10 @@
               newPdfDoc.addPage(copiedPage);
             }
 
-            // 마스킹 적용
-            if (selectedPII.length > 0 || maskingRects.length > 0) {
-              await applyMasking(newPdfDoc, split.startPage, split.endPage);
-            }
-
             const pdfBytes = await newPdfDoc.save();
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
             
+            // 파일명 생성: 번호 + 제목
             const fileName = `${file.name.replace('.pdf', '')}-${String(i + 1).padStart(2, '0')}-${split.title.replace(/[<>:"/\\|?*]/g, '_')}.pdf`;
 
             splitResults.push({
@@ -1136,7 +930,9 @@
               size: blob.size,
               pages: split.endPage - split.startPage + 1,
               title: split.title,
-              level: split.level
+              level: split.level,
+              startPage: split.startPage,
+              endPage: split.endPage
             });
 
             setProgress(Math.round(((i + 1) / splits.length) * 100));
@@ -1152,11 +948,6 @@
         } finally {
           setProcessing(false);
         }
-      };
-
-      const applyMasking = async (pdfDoc, startPage, endPage) => {
-        // 마스킹 로직 (기존 유지)
-        return pdfDoc;
       };
 
       const downloadAll = async () => {
@@ -1192,10 +983,6 @@
         setFile(null);
         setResults([]);
         setSplits([]);
-        setDetectedPII([]);
-        setSelectedPII([]);
-        setMaskingRects([]);
-        setPreviewCache({});
         setProgress(0);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -1211,6 +998,9 @@
           <div className="header">
             <h1>⚡ Quick Splitter for NotebookLM</h1>
             <p>30페이지 & 200MB 제한으로 스마트하게 문서를 분할하세요</p>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+              v2.1 | 최종 수정: 2026-01-09
+            </div>
           </div>
 
           {!file && (
@@ -1257,11 +1047,9 @@
                 <div className="stat-item">
                   💾 {(file.size / 1024 / 1024).toFixed(2)} MB
                 </div>
-                {detectedPII.length > 0 && (
-                  <div className="stat-item">
-                    🔒 {detectedPII.length}개 파일로 분할 예정
-                  </div>
-                )}
+                <div className="stat-item">
+                  📑 {splits.length > 0 ? `${splits.length}개 구간으로 분할 예정` : '분석 중...'}
+                </div>
               </div>
 
               {processing && (
@@ -1303,12 +1091,6 @@
                       ))}
                     </div>
                   </div>
-
-                  {detectedPII.length > 0 && (
-                    <div style={{ marginTop: '2rem', padding: '1rem', background: 'var(--accent)', borderRadius: '8px', border: '1px solid var(--gold)' }}>
-                      <strong>💡 사용 팁:</strong> 각 문서의 소제목으로 내용을 마스킹할 필요 없습니다. 개별 "미리보기" 버튼으로 확인하세요. 전화번호 등이 있을 경우 "마스킹 전체 미리보기"를 통해 모든 개인정보를 한번에 확인할 수 있습니다.
-                    </div>
-                  )}
 
                   <div className="action-section">
                     <button className="button button-primary" onClick={executeSplit}>
