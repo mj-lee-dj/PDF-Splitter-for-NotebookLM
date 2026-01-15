@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚡ Quick Splitter for NotebookLM</title>
+  <title>⚡ Smart Splitter for NotebookLM</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+  
   <style>
     :root {
       --bg-primary: #0a0a0a;
@@ -24,14 +26,10 @@
       --warning: #f59e0b;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg-primary);
       color: var(--text);
       line-height: 1.6;
@@ -46,228 +44,226 @@
 
     .header {
       text-align: center;
-      margin-bottom: 3rem;
-      padding: 2rem;
+      margin-bottom: 2rem;
+      padding: 2.5rem 2rem;
       background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
       border-radius: 20px;
       border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 4px;
+      background: linear-gradient(90deg, var(--gold-dark), var(--gold), var(--gold-light));
     }
 
     .header h1 {
-      font-size: 2.5rem;
+      font-size: 2.2rem;
       background: linear-gradient(135deg, var(--gold), var(--gold-light));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      background-clip: text;
       margin-bottom: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
     }
 
-    .header p {
+    .creator-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255,255,255,0.05);
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
       color: var(--text-secondary);
-      font-size: 1rem;
+      border: 1px solid rgba(255,255,255,0.1);
     }
 
     .upload-section {
       background: var(--bg-secondary);
       border-radius: 16px;
-      padding: 2rem;
+      padding: 3rem 2rem;
       border: 2px dashed var(--border);
       text-align: center;
       transition: all 0.3s ease;
       cursor: pointer;
     }
-
     .upload-section:hover {
       border-color: var(--gold);
       background: var(--bg-tertiary);
-      transform: translateY(-2px);
     }
 
-    .upload-section.dragover {
-      border-color: var(--gold-light);
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { color: var(--gold-light); }
+    .tab-btn.active {
       background: var(--accent);
-      transform: scale(1.02);
+      color: var(--gold);
+      border: 1px solid var(--border);
     }
 
-    .upload-icon {
-      font-size: 4rem;
-      margin-bottom: 1rem;
+    /* OCR Grid */
+    .ocr-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
     }
 
-    input[type="file"] {
-      display: none;
+    .ocr-slot {
+      aspect-ratio: 3/4;
+      background: var(--bg-tertiary);
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+
+    .ocr-slot.active {
+      border-color: var(--gold);
+      background: rgba(212, 175, 55, 0.05);
+      box-shadow: 0 0 10px rgba(212, 175, 55, 0.1);
+    }
+
+    .ocr-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .ocr-placeholder {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.5;
+    }
+    
+    .ocr-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-align: center;
+      padding: 0 0.5rem;
+    }
+
+    /* Editable Split List */
+    .split-list-header {
+      display: grid;
+      grid-template-columns: 50px 1fr 70px 70px 40px;
+      gap: 0.5rem;
+      padding: 0 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .split-item-row {
+      display: grid;
+      grid-template-columns: 50px 1fr 70px 70px 40px;
+      gap: 0.5rem;
+      background: var(--bg-tertiary);
+      padding: 0.8rem;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      align-items: center;
+      border: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    
+    .split-item-row:hover, .split-item-row:focus-within {
+      border-color: var(--gold);
+    }
+
+    .input-dark {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem;
+      border-radius: 4px;
+      width: 100%;
+      font-size: 0.9rem;
+    }
+    
+    .input-dark:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      color: var(--error);
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    .btn-icon:hover { opacity: 1; }
+
+    .action-bar {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
     }
 
     .button {
-      padding: 0.75rem 2rem;
-      border-radius: 12px;
-      font-size: 1rem;
+      padding: 0.8rem 2rem;
+      border-radius: 8px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
       border: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
+      font-size: 1rem;
     }
-
-    .button-primary {
-      background: linear-gradient(135deg, var(--gold), var(--gold-light));
-      color: var(--bg-primary);
-    }
-
-    .button-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(212, 175, 55, 0.3);
-    }
-
-    .button-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .button-secondary:hover {
-      background: var(--bg-secondary);
-      border-color: var(--gold);
-    }
-
-    .progress-section {
-      margin: 2rem 0;
-    }
-
-    .progress-bar {
-      width: 100%;
-      height: 8px;
-      background: var(--bg-tertiary);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 0.5rem;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--gold), var(--gold-light));
-      transition: width 0.3s ease;
-    }
-
-    .progress-text {
-      text-align: center;
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    .file-info {
-      background: var(--bg-secondary);
-      padding: 1.5rem;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      margin-bottom: 2rem;
-    }
-
-    .file-info-title {
-      font-size: 1.2rem;
-      color: var(--gold);
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .file-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-    }
-
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .split-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .split-item {
-      background: var(--bg-secondary);
-      border-radius: 12px;
-      padding: 1.5rem;
-      border: 1px solid var(--border);
-      transition: all 0.2s;
-    }
-
-    .split-item:hover {
-      border-color: var(--gold);
-      transform: translateX(4px);
-    }
-
-    .split-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-
-    .split-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--gold-light);
-    }
-
-    .split-info {
-      display: flex;
-      gap: 1.5rem;
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    }
-
-    .split-actions {
-      display: flex;
-      gap: 0.5rem;
-    }
-
+    .button-primary { background: var(--gold); color: #000; }
+    .button-primary:hover { background: var(--gold-light); }
+    .button-secondary { background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); }
+    
     .toast {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      background: var(--bg-secondary);
-      color: var(--text);
-      padding: 1rem 1.5rem;
-      border-radius: 12px;
+      position: fixed; bottom: 2rem; right: 2rem;
+      background: var(--bg-secondary); color: var(--text);
+      padding: 1rem 1.5rem; border-radius: 12px;
       border: 1px solid var(--gold);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      animation: slideIn 0.3s ease;
       z-index: 1000;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
 
-    @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
+    .progress-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 2000;
     }
-
-    .action-section {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-      margin: 2rem 0;
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -279,18 +275,24 @@
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
-
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     function App() {
       const [file, setFile] = useState(null);
+      const [totalPages, setTotalPages] = useState(0);
+      
+      // Data
+      const [splits, setSplits] = useState([]); // [{start, end, title}]
+      const [results, setResults] = useState([]); // Generated files
+      const [ocrImages, setOcrImages] = useState([null, null, null, null]);
+      const [selectedOcrIndex, setSelectedOcrIndex] = useState(0);
+
+      // UI State
+      const [activeTab, setActiveTab] = useState('auto'); 
       const [processing, setProcessing] = useState(false);
-      const [progress, setProgress] = useState(0);
       const [progressText, setProgressText] = useState('');
-      const [splits, setSplits] = useState([]);
-      const [results, setResults] = useState([]);
       const [toast, setToast] = useState('');
-      const [avgPageSize, setAvgPageSize] = useState(0);
+      const [tocInputText, setTocInputText] = useState('');
       
       const fileInputRef = useRef(null);
 
@@ -300,612 +302,412 @@
           return () => clearTimeout(timer);
         }
       }, [toast]);
+      const showToast = (msg) => setToast(msg);
 
-      const showToast = (message) => {
-        setToast(message);
-      };
+      // Global Paste Handler for OCR
+      useEffect(() => {
+        const handlePaste = (e) => {
+          if (activeTab !== 'ocr') return;
+          const items = e.clipboardData.items;
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+              const blob = items[i].getAsFile();
+              updateOcrImage(selectedOcrIndex, blob);
+              // Auto-advance selection
+              if (selectedOcrIndex < 3) setSelectedOcrIndex(selectedOcrIndex + 1);
+              e.preventDefault();
+              break;
+            }
+          }
+        };
+        window.addEventListener('paste', handlePaste);
+        return () => window.removeEventListener('paste', handlePaste);
+      }, [activeTab, selectedOcrIndex, ocrImages]);
 
-      const handleDragOver = (e) => {
-        e.preventDefault();
-        e.currentTarget.classList.add('dragover');
-      };
-
-      const handleDragLeave = (e) => {
-        e.currentTarget.classList.remove('dragover');
-      };
-
-      const handleDrop = (e) => {
-        e.preventDefault();
-        e.currentTarget.classList.remove('dragover');
-        const droppedFile = e.dataTransfer.files[0];
-        if (droppedFile && droppedFile.type === 'application/pdf') {
-          handleFileSelect(droppedFile);
-        } else {
-          showToast('❌ PDF 파일만 업로드 가능합니다.');
-        }
-      };
-
-      const handleFileInput = (e) => {
-        const selectedFile = e.target.files[0];
-        if (selectedFile) {
-          handleFileSelect(selectedFile);
-        }
-      };
-
-      const handleFileSelect = async (selectedFile) => {
-        setFile(selectedFile);
-        setResults([]);
+      const handleFileSelect = async (e) => {
+        const f = e.target.files ? e.target.files[0] : e.dataTransfer.files[0];
+        if (!f || f.type !== 'application/pdf') return showToast('❌ PDF 파일만 지원합니다.');
+        
+        setFile(f);
         setSplits([]);
+        setResults([]);
+        setOcrImages([null, null, null, null]);
+        setActiveTab('auto');
         
-        showToast('📄 파일 분석 중...');
-        
-        try {
-          const arrayBuffer = await selectedFile.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-          const totalPages = pdf.numPages;
-          
-          const avgSize = selectedFile.size / totalPages;
-          setAvgPageSize(avgSize);
-          
-          showToast(`✅ ${totalPages}페이지 PDF 로드 완료!`);
-          
-          // 자동 분할 시작
-          await analyzePDF(selectedFile, pdf, totalPages, avgSize);
-          
-        } catch (error) {
-          console.error('PDF 로드 오류:', error);
-          showToast('❌ PDF 로드 중 오류가 발생했습니다.');
-        }
-      };
-
-      const analyzePDF = async (file, pdf, totalPages, avgSize) => {
         setProcessing(true);
-        setProgress(10);
-        setProgressText('목차 분석 중...');
-
+        setProgressText('PDF 로딩 및 기본 분석 중...');
         try {
-          // 목차 감지
-          const { hasTOC, tocItems } = await detectTableOfContents(pdf, totalPages);
+          const ab = await f.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(ab).promise;
+          setTotalPages(pdf.numPages);
           
-          setProgress(50);
-          setProgressText('분할 구간 계산 중...');
-
-          // 스마트 분할 생성
-          const smartSplits = await createSmartSplits(totalPages, avgSize, tocItems, pdf);
-
-          setSplits(smartSplits);
-          setProgress(100);
-          setProgressText('분석 완료!');
-          
-          showToast(`✅ ${smartSplits.length}개 구간으로 분할 완료!`);
-
-        } catch (error) {
-          console.error('분석 오류:', error);
-          showToast('❌ 문서 분석 중 오류가 발생했습니다.');
+          // 기본 자동 분석 (초기값 세팅용)
+          await autoAnalyze(pdf);
+        } catch (err) {
+          console.error(err);
+          showToast('❌ 파일 로드 실패');
         } finally {
           setProcessing(false);
         }
       };
 
-      const detectTableOfContents = async (pdf, totalPages) => {
-        const tocPatterns = [
-          /목\s*차|contents|table of contents|차\s*례/i,
-          /제\s*\d+\s*장|chapter\s*\d+|section\s*\d+/gi
-        ];
-
-        let hasTOC = false;
-        const tocItems = [];
-        
-        // 첫 10페이지만 샘플링
-        const samplePages = Math.min(10, totalPages);
-        
-        for (let i = 1; i <= samplePages; i++) {
+      const autoAnalyze = async (pdf) => {
+        // 간단한 목차 스캔
+        let toc = [];
+        let endPage = 0;
+        for(let i=1; i<=Math.min(15, pdf.numPages); i++){
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          const pageText = content.items.map(item => item.str).join(' ');
-          
-          // 목차 키워드 확인
-          if (!hasTOC && tocPatterns[0].test(pageText)) {
-            hasTOC = true;
-          }
-          
-          if (hasTOC) {
-            const lines = pageText.split('\n');
-            for (const line of lines) {
-              const trimmed = line.trim();
-              
-              const match1 = trimmed.match(/^(제?\s*\d+[장절]?\.?\s+|Chapter\s+\d+\.?\s+|\d+\.\s+)(.+?)\.{2,}(\d+)/i);
-              const match2 = trimmed.match(/^([가-힣a-zA-Z\s]{3,40})\.{2,}(\d+)$/);
-              
-              if (match1) {
-                const title = match1[2].trim();
-                const pageNum = parseInt(match1[3]);
-                if (pageNum > 0 && pageNum <= totalPages) {
-                  tocItems.push({ title, page: pageNum });
-                }
-              } else if (match2) {
-                const title = match2[1].trim();
-                const pageNum = parseInt(match2[2]);
-                if (pageNum > 0 && pageNum <= totalPages) {
-                  tocItems.push({ title, page: pageNum });
-                }
-              }
-            }
-          }
-        }
-
-        // 목차 없을 때 패턴 분석
-        if (!hasTOC || tocItems.length === 0) {
-          const sampleInterval = Math.max(Math.floor(totalPages / 10), 1);
-          
-          for (let i = 1; i <= totalPages; i += sampleInterval) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            const pageText = content.items.map(item => item.str).join(' ');
-            const lines = pageText.split('\n');
-            
-            for (const line of lines.slice(0, 5)) {
-              const trimmed = line.trim();
-              const chapterMatch = trimmed.match(/^(제\s*\d+\s*[장절]|Chapter\s+\d+|Section\s+\d+)\s*[:.]\s*(.+)/i);
-              if (chapterMatch) {
-                tocItems.push({
-                  title: chapterMatch[2].trim() || chapterMatch[1].trim(),
-                  page: i
-                });
-                break;
-              }
-            }
-          }
-        }
-
-        return { hasTOC, tocItems: tocItems.slice(0, 20) };
-      };
-
-      const createSmartSplits = async (totalPages, avgSize, tocItems, pdf) => {
-        const maxSizeBytes = 200 * 1024 * 1024;
-        const maxPagesBySize = Math.floor(maxSizeBytes / avgSize);
-        const maxPages = Math.min(30, maxPagesBySize);
-        
-        const splits = [];
-        
-        if (tocItems.length > 0) {
-          for (let i = 0; i < tocItems.length; i++) {
-            const tocItem = tocItems[i];
-            const nextPage = i < tocItems.length - 1 ? tocItems[i + 1].page : totalPages + 1;
-            const sectionPages = nextPage - tocItem.page;
-            
-            if (sectionPages > maxPages) {
-              let chunkStart = tocItem.page;
-              let partNum = 1;
-              
-              while (chunkStart < nextPage) {
-                const chunkEnd = Math.min(chunkStart + maxPages - 1, nextPage - 1);
-                splits.push({
-                  id: Date.now() + splits.length,
-                  startPage: chunkStart,
-                  endPage: chunkEnd,
-                  title: partNum === 1 ? tocItem.title : `${tocItem.title} (Part ${partNum})`
-                });
-                chunkStart = chunkEnd + 1;
-                partNum++;
-              }
-            } else {
-              splits.push({
-                id: Date.now() + splits.length,
-                startPage: tocItem.page,
-                endPage: nextPage - 1,
-                title: tocItem.title
-              });
-            }
-          }
-          
-          if (splits.length > 0 && splits[0].startPage > 1) {
-            splits.unshift({
-              id: Date.now(),
-              startPage: 1,
-              endPage: splits[0].startPage - 1,
-              title: '서문 및 목차'
-            });
-          }
-        } else {
-          // 목차 없을 때: 빠른 패턴 분석
-          try {
-            showToast('📊 목차가 없어 패턴 분석 중...');
-            
-            const detectedChapters = [];
-            
-            const step = Math.max(1, Math.floor(totalPages / 20));
-          
-          for (let pageNum = 1; pageNum <= totalPages; pageNum += step) {
-            const page = await pdf.getPage(Math.min(pageNum, totalPages));
-            const content = await page.getTextContent();
-            
-            const items = content.items;
-            if (items.length === 0) continue;
-            
-            const textItems = items.slice(0, Math.min(5, items.length));
-            const topText = textItems.map(i => i.str).join(' ').trim();
-            
-            const fullText = items.map(i => i.str).join(' ');
-            const textLength = fullText.trim().length;
-            
-            const fontSize = items[0].transform ? items[0].transform[0] : 12;
-            
-            const chapterMatch = topText.match(/^(제?\s*\d+\s*장|Chapter\s+\d+|Part\s+\d+|Section\s+\d+)\s*[:.]\s*(.+)/i);
-            
-            if (chapterMatch || (textLength < 100 && fontSize > 13)) {
-              const title = chapterMatch ? chapterMatch[2].trim() || chapterMatch[1].trim() : topText.slice(0, 30);
-              detectedChapters.push({ page: pageNum, title });
-            }
-          }
-          
-          if (detectedChapters.length > 1) {
-            for (let i = 0; i < detectedChapters.length; i++) {
-              const chapter = detectedChapters[i];
-              const nextChapter = detectedChapters[i + 1];
-              const endPage = nextChapter ? nextChapter.page - 1 : totalPages;
-              
-              splits.push({
-                id: Date.now() + i,
-                startPage: chapter.page,
-                endPage: endPage,
-                title: chapter.title
-              });
-            }
-            showToast(`✅ ${detectedChapters.length}개 구간 자동 감지!`);
-          } else {
-            throw new Error('패턴 미감지');
-          }
-          } catch (error) {
-            console.log('패턴 분석 실패, 기본 분할 적용:', error.message);
-            let currentPage = 1;
-            let splitNumber = 1;
-
-            while (currentPage <= totalPages) {
-              const endPage = Math.min(currentPage + maxPages - 1, totalPages);
-              splits.push({
-                id: Date.now() + splits.length,
-                startPage: currentPage,
-                endPage: endPage,
-                title: `Part ${splitNumber}`
-              });
-              currentPage = endPage + 1;
-              splitNumber++;
-            }
-          }
-        }
-        
-        return validateAndAdjustSplits(splits, avgSize, totalPages);
-      };
-
-      const validateAndAdjustSplits = (splits, avgSize, totalPages) => {
-        const maxSizeBytes = 200 * 1024 * 1024;
-        const maxPagesBySize = Math.floor(maxSizeBytes / avgSize);
-        const maxPages = Math.min(30, maxPagesBySize);
-        
-        const adjustedSplits = [];
-        
-        splits.forEach((split) => {
-          const pageCount = split.endPage - split.startPage + 1;
-          
-          if (pageCount > maxPages) {
-            let currentStart = split.startPage;
-            let partNum = 1;
-            
-            while (currentStart <= split.endPage) {
-              const currentEnd = Math.min(currentStart + maxPages - 1, split.endPage);
-              
-              const partTitle = partNum === 1 
-                ? split.title 
-                : `${split.title} (${partNum})`;
-              
-              adjustedSplits.push({
-                id: Date.now() + adjustedSplits.length,
-                startPage: currentStart,
-                endPage: currentEnd,
-                title: partTitle
-              });
-              currentStart = currentEnd + 1;
-              partNum++;
-            }
-          } else {
-            adjustedSplits.push({
-              id: Date.now() + adjustedSplits.length,
-              ...split
-            });
-          }
-        });
-        
-        // 1페이지부터 시작하지 않으면 앞부분 추가
-        if (adjustedSplits.length > 0 && adjustedSplits[0].startPage > 1) {
-          adjustedSplits.unshift({
-            id: Date.now(),
-            startPage: 1,
-            endPage: adjustedSplits[0].startPage - 1,
-            title: '서문 및 목차'
+          const text = content.items.map(it => it.str).join(' ');
+          if(/목\s*차|Contents/i.test(text)) endPage = Math.max(endPage, i);
+          // Simple regex scan
+          const lines = text.split(/\n|\s{4,}/);
+          lines.forEach(l => {
+             const m = l.match(/^(.*?)\s+\.*(\d+)$/);
+             if(m && parseInt(m[2]) <= pdf.numPages) toc.push({title: m[1].trim(), page: parseInt(m[2])});
           });
         }
         
-        return adjustedSplits;
+        generateSplitsFromToc(toc, endPage, pdf.numPages);
       };
 
-      const executeSplit = async () => {
-        if (splits.length === 0) {
-          showToast('⚠️ 분할할 구간이 없습니다.');
-          return;
+      const generateSplitsFromToc = (tocItems, startContentPage, maxPage) => {
+        let items = tocItems.sort((a,b) => a.page - b.page)
+                            .filter((item, i, self) => i === self.findIndex(t => t.page === item.page));
+        
+        const newSplits = [];
+        let current = 1;
+
+        if (startContentPage > 0) {
+            newSplits.push({ start: 1, end: startContentPage, title: "목차/서문" });
+            current = startContentPage + 1;
         }
 
-        setProcessing(true);
-        setProgress(0);
-        setProgressText('PDF 분할 중...');
+        items.forEach((item, idx) => {
+           if (item.page > current) {
+               // Gap filler
+               // newSplits.push({ start: current, end: item.page - 1, title: "Section" });
+           }
+           const nextItem = items[idx+1];
+           const end = nextItem ? nextItem.page - 1 : maxPage;
+           if (end >= item.page) {
+               newSplits.push({ start: item.page, end: end, title: item.title || `Chapter ${idx+1}` });
+               current = end + 1;
+           }
+        });
 
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-          const splitResults = [];
-
-          for (let i = 0; i < splits.length; i++) {
-            const split = splits[i];
-            const newPdfDoc = await PDFLib.PDFDocument.create();
-
-            for (let pageNum = split.startPage; pageNum <= split.endPage; pageNum++) {
-              const [copiedPage] = await newPdfDoc.copyPages(pdfDoc, [pageNum - 1]);
-              newPdfDoc.addPage(copiedPage);
+        if (newSplits.length === 0) {
+            // Default 30 page chunks
+            for(let i=1; i<=maxPage; i+=30){
+                newSplits.push({start: i, end: Math.min(i+29, maxPage), title: `Part ${Math.ceil(i/30)}`});
             }
+        }
 
-            const pdfBytes = await newPdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            
-            const baseFileName = file.name.replace(/\.pdf$/i, '');
-            const fileName = `${baseFileName}-${String(i + 1).padStart(2, '0')}-${split.title.replace(/[<>:"/\\|?*]/g, '_')}.pdf`;
+        setSplits(newSplits);
+      };
 
-            splitResults.push({
-              name: fileName,
-              blob,
-              size: blob.size,
-              pages: split.endPage - split.startPage + 1,
-              title: split.title,
-              startPage: split.startPage,
-              endPage: split.endPage
-            });
+      // OCR Logic
+      const updateOcrImage = (idx, blob) => {
+        const newImgs = [...ocrImages];
+        newImgs[idx] = blob;
+        setOcrImages(newImgs);
+      };
 
-            setProgress(Math.round(((i + 1) / splits.length) * 100));
-            setProgressText(`${i + 1}/${splits.length} 분할 완료...`);
+      const runOCR = async () => {
+        const imagesToProcess = ocrImages.filter(img => img !== null);
+        if (imagesToProcess.length === 0) return showToast('⚠️ 이미지를 먼저 붙여넣으세요.');
+
+        setProcessing(true);
+        setProgressText('OCR 엔진 가동 중... (잠시만 기다려주세요)');
+        
+        try {
+          const worker = await Tesseract.createWorker('kor+eng', 1);
+          let fullText = "";
+          
+          for (let i = 0; i < imagesToProcess.length; i++) {
+            setProgressText(`이미지 ${i+1} / ${imagesToProcess.length} 분석 중...`);
+            const ret = await worker.recognize(imagesToProcess[i]);
+            fullText += ret.data.text + "\n";
           }
+          await worker.terminate();
 
-          setResults(splitResults);
-          showToast(`✅ ${splitResults.length}개 파일 생성 완료!`);
-
-        } catch (error) {
-          console.error('분할 오류:', error);
-          showToast('❌ 분할 중 오류가 발생했습니다.');
+          setTocInputText(fullText);
+          applyTextParsing(fullText); // Parse immediately
+          setActiveTab('text'); // Go to list view (text tab shares the list view)
+          showToast('✅ OCR 완료! 결과를 확인하고 수정하세요.');
+        } catch (e) {
+          console.error(e);
+          showToast('❌ OCR 오류 발생');
         } finally {
           setProcessing(false);
         }
       };
 
-      const downloadAll = async () => {
-        const zip = new JSZip();
+      // Text Parsing Logic (Refined for Empty Titles)
+      const applyTextParsing = (text) => {
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+        const extracted = [];
+
+        // Logic 1: Standard "Title ... 12"
+        const regex = /^(.*?)\s*[\.\-_]*\s*(\d+)$/;
         
-        results.forEach(result => {
-          zip.file(result.name, result.blob);
+        // Logic 2: Separate blocks (Titles then Numbers)
+        const pureNumbers = [];
+        const potentialTitles = [];
+
+        lines.forEach(line => {
+            // Clean noise like | 12 (vertical bar as 1)
+            let clean = line.replace(/\|/g, '1').replace(/[oO]$/, '0');
+            const match = clean.match(regex);
+            
+            if (match) {
+                // Found combined
+                let title = match[1].trim();
+                const page = parseInt(match[2]);
+                // Remove trailing dots/dashes
+                title = title.replace(/[\.\-_]+$/, '').trim();
+                if (page > 0 && page <= totalPages) {
+                    extracted.push({ title, page });
+                }
+            } else {
+                // Check if number only
+                if (/^[\d\s\.]+$/.test(clean) || /^p\.?\d+$/i.test(clean)) {
+                    const num = parseInt(clean.replace(/\D/g, ''));
+                    if (num > 0) pureNumbers.push(num);
+                } else {
+                    // Treat as title if mostly text
+                    if (clean.length > 1) potentialTitles.push(clean);
+                }
+            }
         });
 
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(zipBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        const baseFileName = file.name.replace(/\.pdf$/i, '');
-        a.download = `${baseFileName}-분할.zip`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showToast('📦 모든 파일 다운로드 완료!');
-      };
-
-      const downloadSingle = (fileData) => {
-        const url = URL.createObjectURL(fileData.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileData.name;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showToast(`✅ ${fileData.name} 다운로드 완료!`);
-      };
-
-      const reset = () => {
-        setFile(null);
-        setResults([]);
-        setSplits([]);
-        setProgress(0);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+        // If simple regex failed to get enough items, try block matching
+        if (extracted.length < lines.length * 0.3 && pureNumbers.length > 0) {
+            // Try to match pure numbers with potential titles
+            // Assuming sequence matches
+            const count = Math.min(pureNumbers.length, potentialTitles.length);
+            for(let i=0; i<count; i++) {
+                extracted.push({
+                    title: potentialTitles[i] || `Section ${i+1}`,
+                    page: pureNumbers[i]
+                });
+            }
+            // If we have numbers but NO titles (titles are empty/noise), fill with defaults
+            if (count === 0 && pureNumbers.length > 0) {
+                 pureNumbers.forEach((p, idx) => {
+                     extracted.push({ title: `Section ${idx+1}`, page: p });
+                 });
+            }
         }
-      };
 
-      return (
-        <div className="container">
-          <div className="header">
-            <h1>⚡ Quick Splitter for NotebookLM</h1>
-            <p>30페이지 & 200MB 제한으로 스마트하게 문서를 분할하세요</p>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-              v2.0 Stable | 최종 수정: 2026-01-09
+        // Deduplicate and Sort
+        const finalItems = [];
+        extracted.sort((a,b) => a.page - b.page).forEach(item => {
+            if(!item.title) item.title = "제목 없음"; // Fallback for empty title
+            const exists = finalItems.find(x => x.page === item.page);
+            if (!exists) finalItems.push(item);
+            else if (item.title.length > exists.title.length) exists.title = item.title;
+        });
+
+        // Create Splits
+        const newSplits = [];
+        if (finalItems.length > 0 && finalItems[0].page > 1) {
+            newSplits.push({ start: 1, end: finalItems[0].page - 1, title: "서문/목차" });
+        }
+        for (let i = 0; i < finalItems.length; i++) {
+            const curr = finalItems[i];
+            const next = finalItems[i+1];
+            const end = next ? next.page - 1 : totalPages;
+            if (end >= curr.page) {
+                newSplits.push({ start: curr.page, end, title: curr.title });
+            }
+        }
+        
+        setSplits(newSplits);
+    };
+
+    // Editing Logic
+    const updateSplit = (idx, field, val) => {
+        const clone = [...splits];
+        clone[idx][field] = val;
+        setSplits(clone);
+    };
+    const addSplit = () => {
+        const last = splits[splits.length-1];
+        const start = last ? parseInt(last.end) + 1 : 1;
+        setSplits([...splits, {start, end: Math.min(start+10, totalPages), title: "새 구간"}]);
+    };
+    const removeSplit = (idx) => {
+        setSplits(splits.filter((_, i) => i !== idx));
+    };
+
+    const executeSplit = async () => {
+        if (!file || splits.length === 0) return;
+        setProcessing(true);
+        setProgressText('PDF 분할 생성 중...');
+        try {
+            const ab = await file.arrayBuffer();
+            const srcDoc = await PDFLib.PDFDocument.load(ab);
+            const gen = [];
+            
+            for(let i=0; i<splits.length; i++){
+                const s = splits[i];
+                const sP = parseInt(s.start); 
+                const eP = parseInt(s.end);
+                if(sP > eP) continue;
+
+                const newDoc = await PDFLib.PDFDocument.create();
+                const indices = [];
+                for(let k=sP; k<=Math.min(eP, totalPages); k++) indices.push(k-1);
+                
+                if(indices.length>0){
+                    const pages = await newDoc.copyPages(srcDoc, indices);
+                    pages.forEach(p => newDoc.addPage(p));
+                    const bytes = await newDoc.save();
+                    const blob = new Blob([bytes], {type:'application/pdf'});
+                    
+                    const cleanTitle = (s.title || "Untitled").replace(/[\\/:*?"<>|]/g, '_');
+                    const name = `${String(i+1).padStart(2,'0')}_${cleanTitle}.pdf`;
+                    gen.push({name, blob, size: blob.size, pages: indices.length});
+                }
+            }
+            setResults(gen);
+            showToast('🎉 분할 완료!');
+        } catch(e) {
+            console.error(e);
+            showToast('❌ 생성 오류');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const downloadZip = async () => {
+        const zip = new JSZip();
+        results.forEach(r => zip.file(r.name, r.blob));
+        const c = await zip.generateAsync({type:'blob'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(c);
+        a.download = "splitted_files.zip";
+        a.click();
+    };
+
+    // UI Render
+    return (
+      <div className="container">
+        {processing && (
+            <div className="progress-overlay">
+                <div className="spinner"></div>
+                <div style={{color:'white'}}>{progressText}</div>
             </div>
-          </div>
+        )}
 
-          {!file && (
-            <div 
-              className="upload-section"
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="upload-icon">📄</div>
-              <h2>PDF 파일을 드래그하거나 클릭하여 업로드</h2>
-              <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                목차 기반 자동 분할
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileInput}
-              />
-              <button 
-                className="button button-primary" 
-                style={{ marginTop: '1rem' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  fileInputRef.current?.click();
-                }}
-              >
-                ⚡ 초고속 분석 · 선택적 미리보기
-              </button>
-            </div>
-          )}
-
-          {file && !results.length && (
-            <div className="file-info">
-              <div className="file-info-title">
-                📘 문서 정보 및 분할 제안
-              </div>
-              <div className="file-stats">
-                <div className="stat-item">
-                  📄 {file.name}
-                </div>
-                <div className="stat-item">
-                  💾 {(file.size / 1024 / 1024).toFixed(2)} MB
-                </div>
-                <div className="stat-item">
-                  📑 {splits.length > 0 ? `${splits.length}개 구간으로 분할 예정` : '분석 중...'}
-                </div>
-              </div>
-
-              {processing && (
-                <div className="progress-section">
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-                  </div>
-                  <div className="progress-text">{progressText}</div>
-                </div>
-              )}
-
-              {splits.length > 0 && (
-                <>
-                  <div style={{ marginTop: '2rem' }}>
-                    <h3 style={{ color: 'var(--gold)', marginBottom: '1rem' }}>
-                      📑 분할 구간 ({splits.length}개)
-                    </h3>
-                    <div className="split-list">
-                      {splits.map((split, idx) => (
-                        <div key={split.id} className="split-item">
-                          <div className="split-header">
-                            <div>
-                              <span className="split-title">
-                                {String(idx + 1).padStart(2, '0')}. {split.title}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="split-info">
-                            <span>📄 {split.startPage}~{split.endPage}페이지</span>
-                            <span>📊 {split.endPage - split.startPage + 1}페이지</span>
-                            <span>💾 {((avgPageSize * (split.endPage - split.startPage + 1)) / (1024 * 1024)).toFixed(2)} MB</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="action-section">
-                    <button className="button button-primary" onClick={executeSplit}>
-                      ✂️ 분할 실행
-                    </button>
-                    <button className="button button-secondary" onClick={reset}>
-                      🔄 새로 시작
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {results.length > 0 && (
-            <div>
-              <h2 style={{ color: 'var(--gold)', marginBottom: '1.5rem' }}>
-                ✅ 분할 완료 ({results.length}개 파일)
-              </h2>
-              
-              <div className="split-list">
-                {results.map((result, idx) => (
-                  <div key={idx} className="split-item">
-                    <div className="split-header">
-                      <div>
-                        <div className="split-title">
-                          {result.title}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                          {result.name}
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          downloadSingle(result);
-                        }}
-                        style={{
-                          background: 'linear-gradient(135deg, #d4af37, #f4d03f)',
-                          color: '#0a0a0a',
-                          border: 'none',
-                          padding: '0.5rem 1rem',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontWeight: '600',
-                          fontSize: '0.85rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
-                        onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
-                      >
-                        ⬇️ 다운로드
-                      </button>
-                    </div>
-                    <div className="split-info">
-                      <span>📄 {result.pages}페이지</span>
-                      <span style={{ color: result.size > 200 * 1024 * 1024 ? 'var(--error)' : 'var(--text-secondary)' }}>
-                        💾 {(result.size / 1024 / 1024).toFixed(2)} MB
-                        {result.size > 200 * 1024 * 1024 && ' (200MB 초과!)'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="action-section">
-                <button className="button button-primary" onClick={downloadAll}>
-                  📦 전체 다운로드 (ZIP)
-                </button>
-                <button className="button button-secondary" onClick={reset}>
-                  🔄 새로 시작
-                </button>
-              </div>
-            </div>
-          )}
-
-          {toast && (
-            <div className="toast">
-              <span>{toast.includes('❌') || toast.includes('⚠️') ? '⚠️' : '✅'}</span>
-              <span>{toast}</span>
-            </div>
-          )}
+        <div className="header">
+          <h1>⚡ Smart Splitter <span style={{fontSize:'0.6em', color:'var(--gold)'}}>for NotebookLM</span></h1>
+          <div className="creator-badge">Created by MJ LEE · lang2kmj@gmail.com</div>
         </div>
-      );
-    }
 
+        {!file ? (
+          <div 
+            className="upload-section"
+            onClick={() => fileInputRef.current.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleFileSelect}
+          >
+            <div style={{fontSize:'3rem', marginBottom:'1rem'}}>📂</div>
+            <h3>PDF 파일 업로드</h3>
+            <p style={{color:'var(--text-secondary)'}}>드래그 앤 드롭 또는 클릭하여 선택</p>
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="application/pdf" style={{display:'none'}}/>
+          </div>
+        ) : (
+          <div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+               <h3 style={{margin:0}}>📄 {file.name} ({totalPages}p)</h3>
+               <button className="button button-secondary" onClick={() => setFile(null)}>🔄 파일 변경</button>
+            </div>
+
+            {results.length === 0 && (
+                <div className="tabs">
+                    <button className={`tab-btn ${activeTab==='auto'?'active':''}`} onClick={()=>setActiveTab('auto')}>🤖 자동 분석</button>
+                    <button className={`tab-btn ${activeTab==='ocr'?'active':''}`} onClick={()=>setActiveTab('ocr')}>📷 목차 이미지 (OCR)</button>
+                    <button className={`tab-btn ${activeTab==='text'?'active':''}`} onClick={()=>setActiveTab('text')}>🛠️ 결과 수정 및 분할</button>
+                </div>
+            )}
+
+            {results.length > 0 ? (
+                <div className="editor-area">
+                    <h3 style={{color:'var(--success)', marginBottom:'1rem'}}>✅ 완료되었습니다 ({results.length}개 파일)</h3>
+                    {results.map((r,i) => (
+                        <div key={i} className="split-item-row">
+                             <div>#{i+1}</div>
+                             <div style={{fontWeight:'bold'}}>{r.name}</div>
+                             <div>{r.pages}p</div>
+                             <div>{(r.size/1024/1024).toFixed(2)}MB</div>
+                             <a href={URL.createObjectURL(r.blob)} download={r.name} className="button button-secondary" style={{padding:'0.2rem 0.5rem'}}>⬇️</a>
+                        </div>
+                    ))}
+                    <div className="action-bar">
+                        <button className="button button-primary" onClick={downloadZip}>📦 전체 다운로드 (ZIP)</button>
+                        <button className="button button-secondary" onClick={()=>{setResults([]); setActiveTab('text');}}>수정 후 다시 생성</button>
+                    </div>
+                </div>
+            ) : (
+                <>
+                  {activeTab === 'ocr' && (
+                    <div className="editor-area">
+                        <p style={{textAlign:'center', marginBottom:'1rem', color:'var(--gold-light)'}}>
+                           원하는 칸을 클릭(선택) 후 <b>Ctrl+V</b>를 눌러 목차 이미지를 붙여넣으세요.
+                        </p>
+                        <div className="ocr-grid">
+                            {ocrImages.map((img, i) => (
+                                <div 
+                                    key={i} 
+                                    className={`ocr-slot ${selectedOcrIndex===i ? 'active' : ''}`}
+                                    onClick={() => setSelectedOcrIndex(i)}
+                                >
+                                    {img ? <img src={URL.createObjectURL(img)} /> : <div className="ocr-placeholder">+</div>}
+                                    <div className="ocr-label">이미지 {i+1}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{textAlign:'center'}}>
+                            <button className="button button-primary" onClick={runOCR}>✨ 텍스트 추출 및 적용</button>
+                        </div>
+                    </div>
+                  )}
+
+                  {(activeTab === 'auto' || activeTab === 'text') && (
+                    <div className="editor-area">
+                         {activeTab === 'auto' && <p style={{marginBottom:'1rem', color:'gray'}}>자동 분석된 결과입니다. 필요하면 수정하세요.</p>}
+                         {activeTab === 'text' && <p style={{marginBottom:'1rem', color:'gray'}}>OCR 결과 또는 직접 입력한 결과입니다. 제목과 구간을 수정하세요.</p>}
+                         
+                         <div className="split-list-header">
+                             <div>번호</div><div>문서 제목 (파일명)</div><div>시작 P</div><div>종료 P</div><div>삭제</div>
+                         </div>
+                         <div className="split-list">
+                             {splits.map((s, i) => (
+                                 <div key={i} className="split-item-row">
+                                     <div>{i+1}</div>
+                                     <input className="input-dark" value={s.title} onChange={e=>updateSplit(i,'title',e.target.value)} placeholder="제목을 입력하세요"/>
+                                     <input className="input-dark" type="number" value={s.start} onChange={e=>updateSplit(i,'start',e.target.value)} />
+                                     <input className="input-dark" type="number" value={s.end} onChange={e=>updateSplit(i,'end',e.target.value)} />
+                                     <button className="btn-icon" onClick={()=>removeSplit(i)}>❌</button>
+                                 </div>
+                             ))}
+                             <button className="button button-secondary" style={{width:'100%', marginTop:'0.5rem'}} onClick={addSplit}>+ 구간 추가</button>
+                         </div>
+
+                         <div className="action-bar">
+                             <button className="button button-primary" onClick={executeSplit}>✂️ 분할 실행</button>
+                         </div>
+                    </div>
+                  )}
+                </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+    }
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
