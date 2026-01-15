@@ -436,7 +436,8 @@
         let hasTOC = false;
         let tocEndPage = 0;
 
-        const samplePages = Math.min(15, totalPages);
+        // 초반 10페이지를 면밀하게 분석
+        const samplePages = Math.min(10, totalPages);
         
         for (let i = 1; i <= samplePages; i++) {
           const page = await pdf.getPage(i);
@@ -446,6 +447,7 @@
           // 목차 키워드 확인
           if (!hasTOC && /목\s*차|contents|table of contents|차\s*례/i.test(pageText)) {
             hasTOC = true;
+            console.log(`목차 발견: ${i}페이지`);
           }
           
           if (hasTOC) {
@@ -453,54 +455,82 @@
             
             for (const line of lines) {
               const trimmed = line.trim();
+              if (trimmed.length < 3) continue;
               
-              // Level 1: 큰 제목 (제1장, Chapter 1, 1.)
-              const level1Match = trimmed.match(/^(제?\s*\d+\s*[장편부]\.?\s*|Chapter\s+\d+\.?\s*|Part\s+\d+\.?\s*|\d+\.\s+)([^\.]{3,60}?)\.{2,}(\d+)/i);
+              // 패턴 1: 번호. 제목 ....... 페이지 (가장 일반적)
+              const pattern1 = trimmed.match(/^(\d+)\.\s*([^\.]{3,80}?)\s*\.{2,}\s*(\d+)\s*$/i);
               
-              // Level 2: 중간 제목 (1-1, 1.1, 가., a.)
-              const level2Match = trimmed.match(/^(\d+[-\.]\d+\.?\s*|[가나다라]\.?\s*|[a-z]\.?\s+)([^\.]{3,50}?)\.{2,}(\d+)/i);
+              // 패턴 2: 제1장 제목 ....... 페이지
+              const pattern2 = trimmed.match(/^(제\s*\d+\s*[장편부])\.\s*([^\.]{3,80}?)\s*\.{2,}\s*(\d+)\s*$/i);
               
-              // Level 3: 작은 제목 (1), (가), a))
-              const level3Match = trimmed.match(/^(\(\d+\)\.?\s*|\([가-힣]\)\.?\s*|\d+\)\.?\s*)([^\.]{3,40}?)\.{2,}(\d+)/i);
+              // 패턴 3: Chapter 1. 제목 ....... 페이지
+              const pattern3 = trimmed.match(/^(Chapter\s+\d+|Part\s+\d+)\.\s*([^\.]{3,80}?)\s*\.{2,}\s*(\d+)\s*$/i);
+              
+              // 패턴 4: 1-1. 소제목 ....... 페이지
+              const pattern4 = trimmed.match(/^(\d+[-\.]\d+)\.\s*([^\.]{3,60}?)\s*\.{2,}\s*(\d+)\s*$/i);
+              
+              // 패턴 5: 가. 소제목 ....... 페이지
+              const pattern5 = trimmed.match(/^([가나다라마바사]\.|[a-z]\.)\s*([^\.]{3,50}?)\s*\.{2,}\s*(\d+)\s*$/i);
               
               let match = null;
               let level = 0;
               
-              if (level1Match) {
-                match = level1Match;
+              if (pattern2) {
+                match = pattern2;
                 level = 1;
-              } else if (level2Match) {
-                match = level2Match;
+              } else if (pattern3) {
+                match = pattern3;
+                level = 1;
+              } else if (pattern1) {
+                match = pattern1;
+                level = 1;
+              } else if (pattern4) {
+                match = pattern4;
                 level = 2;
-              } else if (level3Match) {
-                match = level3Match;
-                level = 3;
+              } else if (pattern5) {
+                match = pattern5;
+                level = 2;
               }
               
               if (match) {
+                const prefix = match[1].trim();
                 const title = match[2].trim();
                 const pageNum = parseInt(match[3]);
                 
-                if (pageNum > 0 && pageNum <= totalPages && title.length >= 3) {
-                  tocItems.push({
-                    title,
-                    page: pageNum,
-                    level,
-                    prefix: match[1].trim()
-                  });
+                // 유효성 검사
+                if (pageNum > 0 && pageNum <= totalPages && title.length >= 3 && title.length <= 100) {
+                  // 중복 체크
+                  const isDuplicate = tocItems.some(item => 
+                    item.page === pageNum && item.title === title
+                  );
+                  
+                  if (!isDuplicate) {
+                    tocItems.push({
+                      title: title,  // prefix 없이 제목만 사용
+                      page: pageNum,
+                      level,
+                      prefix: prefix
+                    });
+                    console.log(`목차 항목 추가: ${title} (${pageNum}페이지, Level ${level})`);
+                  }
                 }
               }
             }
             
-            // 목차가 끝나는 페이지 추정
-            if (tocItems.length > 0 && 
-                pageText.match(/제\s*1\s*[장절]|Chapter\s+1|1\.\s*[가-힣]{3,}/i)) {
-              tocEndPage = i;
-              break;
+            // 목차가 끝나는 페이지 추정 (본문 시작 감지)
+            if (tocItems.length > 0) {
+              const hasChapterStart = pageText.match(/^(제\s*1\s*[장절]|Chapter\s+1|1\.\s+[가-힣]{3,})/m);
+              if (hasChapterStart) {
+                tocEndPage = i;
+                console.log(`목차 종료 페이지: ${tocEndPage}`);
+                break;
+              }
             }
           }
         }
 
+        console.log(`총 ${tocItems.length}개 목차 항목 추출 완료`);
+        
         return {
           hasTOC,
           tocItems: tocItems.slice(0, 50),
@@ -922,7 +952,8 @@
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
             
             // 파일명 생성: 번호 + 제목
-            const fileName = `${file.name.replace('.pdf', '')}-${String(i + 1).padStart(2, '0')}-${split.title.replace(/[<>:"/\\|?*]/g, '_')}.pdf`;
+            const baseFileName = file.name.replace(/\.pdf$/i, '');  // 대소문자 무시
+            const fileName = `${baseFileName}-${String(i + 1).padStart(2, '0')}-${split.title.replace(/[<>:"/\\|?*]/g, '_')}.pdf`;
 
             splitResults.push({
               name: fileName,
@@ -953,15 +984,16 @@
       const downloadAll = async () => {
         const zip = new JSZip();
         
-        results.forEach(file => {
-          zip.file(file.name, file.blob);
+        results.forEach(result => {
+          zip.file(result.name, result.blob);
         });
 
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         const url = URL.createObjectURL(zipBlob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${file.name.replace('.pdf', '')}-분할.zip`;
+        const baseFileName = file.name.replace(/\.pdf$/i, '');  // 대소문자 무시
+        a.download = `${baseFileName}-분할.zip`;
         a.click();
         URL.revokeObjectURL(url);
         
@@ -999,7 +1031,7 @@
             <h1>⚡ Quick Splitter for NotebookLM</h1>
             <p>30페이지 & 200MB 제한으로 스마트하게 문서를 분할하세요</p>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-              v2.1 | 최종 수정: 2026-01-09
+              v2.2 | 최종 수정: 2026-01-14
             </div>
           </div>
 
