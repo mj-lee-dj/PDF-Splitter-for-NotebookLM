@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ Smart Splitter (100% Offline Local Sandbox)</title>
+  <meta name="description" content="인터넷 연결이 필요 없는 100% 오프라인 로컬 처리 스마트 PDF 스플리터">
+  
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+  
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    :root {
+      --bg-primary: #050505;
+      --bg-secondary: #0f0f0f;
+      --bg-tertiary: #181818;
+      --text: #ffffff;
+      --text-secondary: #a0a0a0;
+      --gold: #d4af37;
+      --gold-light: #f4d03f;
+      --gold-dark: #9d8028;
+      --accent: rgba(212, 175, 55, 0.08);
+      --border: rgba(212, 175, 55, 0.2);
+    }
+    body {
+      background-color: var(--bg-primary);
+      color: #f0f0f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .spinner {
+      width: 45px;
+      height: 45px;
+      border: 3.5px solid rgba(255, 255, 255, 0.05);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    function OfflineApp() {
+      const [file, setFile] = useState(null);
+      const [totalPages, setTotalPages] = useState(0);
+      const [splits, setSplits] = useState([]);
+      const [results, setResults] = useState([]);
+      const [ocrImages, setOcrImages] = useState([null, null, null, null]);
+      const [selectedOcrIndex, setSelectedOcrIndex] = useState(0);
+      const [activeTab, setActiveTab] = useState('auto');
+      const [processing, setProcessing] = useState(false);
+      const [progressText, setProgressText] = useState('');
+      const [toast, setToast] = useState('');
+      const [isDragActive, setIsDragActive] = useState(false);
+
+      const fileInputRef = useRef(null);
+
+      useEffect(() => {
+        if (toast) {
+          const t = setTimeout(() => setToast(''), 3000);
+          return () => clearTimeout(t);
+        }
+      }, [toast]);
+
+      useEffect(() => {
+        const handlePaste = (e) => {
+          if (activeTab !== 'ocr') return;
+          const items = e.clipboardData?.items;
+          if (!items) return;
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+              const b = items[i].getAsFile();
+              if (b) {
+                const newImgs = [...ocrImages];
+                newImgs[selectedOcrIndex] = b;
+                setOcrImages(newImgs);
+                setToast("📸 이미지가 붙여넣어졌습니다.");
+                if (selectedOcrIndex < 3) setSelectedOcrIndex(selectedOcrIndex + 1);
+              }
+              e.preventDefault();
+              break;
+            }
+          }
+        };
+        window.addEventListener('paste', handlePaste);
+        return () => window.removeEventListener('paste', handlePaste);
+      }, [activeTab, selectedOcrIndex, ocrImages]);
+
+      const handleFile = async (f) => {
+        if (f.type !== 'application/pdf') return setToast('❌ PDF 파일만 지원합니다.');
+        setFile(f);
+        setSplits([]);
+        setResults([]);
+        setOcrImages([null, null, null, null]);
+        setActiveTab('auto');
+        setProcessing(true);
+        setProgressText('구조를 인메모리에서 분석 중입니다...');
+
+        try {
+          const ab = await f.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+          setTotalPages(pdf.numPages);
+          
+          let tocItems = [];
+          const maxScan = Math.min(15, pdf.numPages);
+          for(let i=1; i<=maxScan; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const text = textContent.items.map(item => item.str).join(' ');
+            const lines = text.split(/\n|\s{3,}/);
+            lines.forEach(l => {
+              const m = l.match(/^(.*?)\s+\.*(\d+)$/);
+              if (m) {
+                const pNum = parseInt(m[2]);
+                if (pNum > 0 && pNum <= pdf.numPages) tocItems.push({ title: m[1].trim(), page: pNum });
+              }
+            });
+          }
+
+          const sorted = tocItems.sort((a,b) => a.page - b.page).filter((it, idx, self) => idx === self.findIndex(x=>x.page===it.page));
+          const list = [];
+          let current = 1;
+
+          sorted.forEach((item, idx) => {
+            const next = sorted[idx+1];
+            const end = next ? next.page - 1 : pdf.numPages;
+            if (end >= item.page && item.page >= current) {
+              list.push({ start: item.page, end: Math.min(end, pdf.numPages), title: item.title || "Part " + (idx+1) });
+              current = end + 1;
+            }
+          });
+
+          if(list.length === 0) {
+            for(let i=1; i<=pdf.numPages; i+=30){
+              list.push({ start: i, end: Math.min(i+29, pdf.numPages), title: "Part " + Math.ceil(i/30) });
+            }
+          }
+          setSplits(list);
+        } catch(err) {
+          setToast('❌ PDF 분석 오류');
+          setFile(null);
+        } finally {
+          setProcessing(false);
+        }
+      };
+
+      const runOCR = async () => {
+        const activeImages = ocrImages.filter(img => img !== null);
+        if (activeImages.length === 0) return setToast('⚠️ 이미지를 먼저 등록하세요.');
+        setProcessing(true);
+        setProgressText('OCR 번역 스레드를 구동하여 로컬에서 판독하고 있습니다...');
+        try {
+          const worker = await Tesseract.createWorker('kor+eng');
+          let combined = '';
+          for (let i = 0; i < activeImages.length; i++) {
+            setProgressText("이미지 해독 중... (" + (i+1) + "/" + activeImages.length + ")");
+            const { data } = await worker.recognize(activeImages[i]);
+            combined += data.text + '\n';
+          }
+          await worker.terminate();
+
+          // Simple Parse logic
+          const normalized = combined
+            .replace(/[①➊❶⑴]/g, '1').replace(/[②➋❷⑵]/g, '2').replace(/[③➌❸⑶]/g, '3')
+            .replace(/[④➍❹⑷]/g, '4').replace(/[⑤➎❺⑸]/g, '5');
+          const lines = normalized.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+          const extracted = [];
+          lines.forEach(l => {
+            const match = l.replace(/[\.\-_]+/g, ' ').match(/^(.*?)\s+([0-9]+)$/);
+            if(match) {
+              const pNum = parseInt(match[2]);
+              if(pNum > 0 && pNum <= totalPages) {
+                extracted.push({ title: match[1].trim(), page: pNum });
+              }
+            }
+          });
+
+          const path = [];
+          const sorted = extracted.sort((a,b) => a.page - b.page);
+          for(let i=0; i<sorted.length; i++) {
+            const end = sorted[i+1] ? sorted[i+1].page - 1 : totalPages;
+            path.push({ start: sorted[i].page, end, title: sorted[i].title });
+          }
+          if(path.length > 0) setSplits(path);
+
+          setActiveTab('text');
+          setToast('🎉 OCR 분석이 완료되었습니다!');
+        } catch(e) {
+          setToast('❌ OCR 엔진 에러 발생');
+        } finally {
+          setProcessing(false);
+        }
+      };
+
+      const executeSplit = async () => {
+        if(!file || splits.length === 0) return;
+        setProcessing(true);
+        setProgressText('자체 샌드박스에서 세그먼트를 묶어가며 복사 중...');
+        try {
+          const ab = await file.arrayBuffer();
+          const srcDoc = await PDFLib.PDFDocument.load(ab);
+          const generated = [];
+
+          for (let i = 0; i < splits.length; i++) {
+            const s = splits[i];
+            const sP = Number(s.start);
+            const eP = Number(s.end);
+            if (sP > eP) continue;
+
+            const newDoc = await PDFLib.PDFDocument.create();
+            const indices = [];
+            for (let k = sP; k <= Math.min(eP, totalPages); k++) indices.push(k-1);
+
+            if(indices.length > 0) {
+              const copiedPages = await newDoc.copyPages(srcDoc, indices);
+              copiedPages.forEach(p => newDoc.addPage(p));
+              const bytes = await newDoc.save();
+              const chunkBlob = new Blob([bytes], { type: 'application/pdf' });
+              const name = (i+1).toString().padStart(2, '0') + "_" + (s.title || 'Untitled').replace(/[\\/:*?"<>|]/g, '_') + ".pdf";
+              generated.push({ name, blob: chunkBlob, size: chunkBlob.size, pages: indices.length });
+            }
+          }
+          setResults(generated);
+          setToast('🎉 스마트 분해 이행 완료!');
+        } catch(err) {
+          setToast('❌ 분단 슬라이싱 처리에 실패했습니다.');
+        } finally {
+          setProcessing(false);
+        }
+      };
+
+      const downloadZip = async () => {
+        const zip = new JSZip();
+        results.forEach(r => zip.file(r.name, r.blob));
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = "notebooklm_ready.zip";
+        a.click();
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto p-6 sm:p-12 min-h-screen flex flex-col justify-between">
+          {processing && (
+            <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50">
+              <div className="spinner"></div>
+              <p className="mt-4 text-[var(--gold)] font-medium text-lg">Local Thread Processing</p>
+              <p className="mt-1 text-zinc-400 text-sm font-mono max-w-sm text-center">{progressText}</p>
+            </div>
+          )}
+
+          <div>
+            <header className="text-center py-6 border border-[rgba(212,175,55,0.25)] rounded-2xl bg-zinc-900/60 mb-8 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-700 via-yellow-500 to-yellow-300"></div>
+              <h1 className="text-3xl font-extrabold text-white">Smart Splitter</h1>
+              <p className="text-sm text-zinc-400 mt-1">100% Offline Local Sandbox Mode</p>
+            </header>
+
+            {!file ? (
+              <div 
+                className="border-2 border-dashed border-zinc-800 hover:border-[var(--gold)] bg-zinc-950 rounded-2xl p-16 text-center cursor-pointer transition-all"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setIsDragActive(true); }}
+                onDragLeave={() => setIsDragActive(false)}
+                onDrop={e => { e.preventDefault(); setIsDragActive(false); handleFile(e.dataTransfer.files[0]); }}
+              >
+                <div className="text-4xl mb-4">📂</div>
+                <h3 className="text-lg font-bold text-white mb-1">오프라인 PDF 파일을 여기에 놓으세요</h3>
+                <p className="text-zinc-500 text-sm">또는 클릭해서 수동 탐색기 열기</p>
+                <input ref={fileInputRef} type="file" className="hidden" accept="application/pdf" onChange={e => handleFile(e.target.files[0])} />
+              </div>
+            ) : (
+              <div className="border border-zinc-800 bg-zinc-900/40 rounded-2xl p-6 shadow-2xl">
+                <div className="flex gap-4 items-center justify-between border-b border-zinc-800 pb-4 mb-6">
+                  <div>
+                    <h3 className="text-md font-bold text-white">{file.name}</h3>
+                    <p className="text-xs text-zinc-500">{totalPages} Pages</p>
+                  </div>
+                  <button className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs px-3 py-1.5 rounded-lg text-white" onClick={() => setFile(null)}>🔄 다른 파일</button>
+                </div>
+
+                {results.length === 0 && (
+                  <div className="flex bg-black/40 p-1 border border-zinc-850 rounded-xl mb-6">
+                    <button className={"flex-1 py-2 text-xs font-bold rounded-lg text-center " + (activeTab==='auto'?'bg-[var(--gold)] text-black':'text-zinc-400')} onClick={()=>setActiveTab('auto')}>🤖 자동</button>
+                    <button className={"flex-1 py-2 text-xs font-bold rounded-lg text-center " + (activeTab==='ocr'?'bg-[var(--gold)] text-black':'text-zinc-400')} onClick={()=>setActiveTab('ocr')}>📷 OCR</button>
+                    <button className={"flex-1 py-2 text-xs font-bold rounded-lg text-center " + (activeTab==='text'?'bg-[var(--gold)] text-black':'text-zinc-400')} onClick={()=>setActiveTab('text')}>🛠️ 결과 수정</button>
+                  </div>
+                )}
+
+                {results.length > 0 ? (
+                  <div>
+                    <div className="text-center py-6">
+                      <div className="text-4xl mb-2">✅</div>
+                      <h3 className="text-xl font-bold">오프라인 분할 완료!</h3>
+                      <p className="text-xs text-zinc-500">{results.length}개의 호환 조각 파일이 빌드되었습니다.</p>
+                    </div>
+
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto mb-6">
+                      {results.map((r, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-3 bg-zinc-950 border border-zinc-900 rounded-xl">
+                          <span className="text-xs font-bold truncate pr-3">{r.name}</span>
+                          <div className="flex gap-4 items-center shrink-0">
+                            <span className="text-[10px] text-zinc-500">{r.pages}p</span>
+                            <a href={URL.createObjectURL(r.blob)} download={r.name} className="bg-zinc-800 hover:bg-zinc-700 font-bold border border-zinc-700 text-[10px] px-2.5 py-1 rounded text-white">⬇️ 다운로드</a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button className="flex-1 bg-[var(--gold)] hover:bg-[#ebd04f] text-black font-extrabold py-3 rounded-lg text-sm" onClick={downloadZip}>📦 전체 ZIP 패키지 아카이브 받기</button>
+                      <button className="bg-zinc-800 px-6 font-bold text-zinc-400 hover:text-white rounded-lg text-xs" onClick={() => { setResults([]); setActiveTab('text'); }}>되돌아가 수치 변경</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {activeTab === 'ocr' && (
+                      <div className="flex flex-col items-center">
+                        <p className="text-xs text-zinc-400 mb-4 text-center">원하는 슬롯을 포커싱한 후 <b>Ctrl+V</b>를 누르시면 캡처 이미지가 탑재됩니다.</p>
+                        <div className="grid grid-cols-4 gap-3 w-full mb-6">
+                          {ocrImages.map((img, i) => (
+                            <div 
+                              key={i} 
+                              className={"aspect-[3/4] border rounded-xl flex items-center justify-center cursor-pointer relative overflow-hidden " + (selectedOcrIndex===i?'border-[var(--gold)] bg-zinc-900':'border-zinc-800 bg-zinc-950')}
+                              onClick={() => setSelectedOcrIndex(i)}
+                            >
+                              {img ? (
+                                <img src={URL.createObjectURL(img)} className="w-full h-full object-contain" />
+                              ) : (
+                                <span className="text-lg text-zinc-700 font-bold">{i+1}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button className="w-full bg-[var(--gold)] hover:bg-yellow-500 text-black py-3.5 font-bold rounded-xl text-xs" onClick={runOCR}>✨ 목차 OCR 해독 적용</button>
+                      </div>
+                    )}
+
+                    {(activeTab === 'auto' || activeTab === 'text') && (
+                      <div>
+                        <div className="grid grid-cols-[40px_1fr_60px_60px_40px] text-[10px] text-zinc-500 font-semibold uppercase mb-2 px-3">
+                          <span className="text-center">No</span>
+                          <span>제목</span>
+                          <span className="text-center">시작</span>
+                          <span className="text-center">끝</span>
+                          <span className="text-center">삭제</span>
+                        </div>
+                        <div className="space-y-1 max-h-[300px] overflow-y-auto mb-4 pr-1">
+                          {splits.map((s, idx) => (
+                            <div key={idx} className="grid grid-cols-[40px_1fr_60px_60px_40px] items-center gap-2 p-1.5 bg-zinc-950/40 border border-zinc-900 rounded-xl hover:bg-zinc-900/20">
+                              <span className="text-center font-mono text-zinc-600 font-bold text-xs">{idx+1}</span>
+                              <input className="bg-black/60 border border-zinc-800 text-xs px-2.5 py-1.5 focus:border-[var(--gold)] outline-none rounded-lg text-zinc-100 placeholder-zinc-700" value={s.title} onChange={e => { const c = [...splits]; c[idx].title = e.target.value; setSplits(c); }} />
+                              <input className="bg-black/60 text-center border border-zinc-800 text-xs py-1.5 focus:border-[var(--gold)] outline-none rounded-lg font-mono text-white" value={s.start} onChange={e => { const c = [...splits]; c[idx].start = Number(e.target.value); setSplits(c); }} />
+                              <input className="bg-black/60 text-center border border-zinc-800 text-xs py-1.5 focus:border-[var(--gold)] outline-none rounded-lg font-mono text-white" value={s.end} onChange={e => { const c = [...splits]; c[idx].end = Number(e.target.value); setSplits(c); }} />
+                              <button className="text-zinc-600 hover:text-red-500 text-xs" onClick={() => setSplits(splits.filter((_, i) => i !== idx))}>❌</button>
+                            </div>
+                          ))}
+                        </div>
+                        <button className="w-full bg-zinc-950 text-xs py-2.5 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white mb-6" onClick={() => {
+                          const last = splits[splits.length-1];
+                          const start = last ? Number(last.end) + 1 : 1;
+                          if(start <= totalPages) setSplits([...splits, { start, end: Math.min(start+9, totalPages), title: "새 구간 " + (splits.length+1) }]);
+                        }}>+ 분할 구간 추가</button>
+                        <button className="w-full bg-[var(--gold)] hover:bg-[#e4be32] text-black font-extrabold py-3.5 rounded-xl text-sm" onClick={executeSplit}>✂️ 스마트 분할 컷 이행</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <footer className="mt-12 text-center text-xs pb-4">
+            <div className="flex flex-col items-center gap-1.5">
+              <span className="text-zinc-500">Created by <b>MJ LEE</b> | lang2kmj@gmail.com</span>
+              <span className="text-emerald-500 px-3 py-1 bg-emerald-950/10 border border-emerald-500/10 rounded-full font-bold text-[10px]">🛡️ All file processes operate 100% locally in your RAM memory. No networks.</span>
+            </div>
+          </footer>
+
+          {toast && <div className="fixed bottom-4 right-4 bg-zinc-900 border border-[var(--gold)] px-4 py-2.5 rounded-xl text-xs shadow-2xl">{toast}</div>}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<OfflineApp />);
+  </script>
+</body>
+</html>
